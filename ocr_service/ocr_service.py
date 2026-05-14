@@ -1,11 +1,12 @@
 from flask import Blueprint, jsonify, request
 from common.logger import log_event
-import pytesseract
-from PIL import Image
+from common.config import Config
+import google.generativeai as genai
 import io
 
-# Jika Tesseract tidak ada di PATH, Anda perlu mengarahkan ke path eksekusinya
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Konfigurasi Gemini API
+genai.configure(api_key=Config.GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-flash-latest')
 
 ocr_bp = Blueprint('ocr', __name__)
 
@@ -41,15 +42,20 @@ def extract_text():
     log_event("ocr_service", f"Processing file: {file.filename}")
     
     try:
-        # Buka gambar menggunakan PIL
-        img = Image.open(file.stream)
+        # Baca stream file
+        image_data = file.read()
         
-        # Jalankan Tesseract OCR
-        # --psm 6 berasumsi teks berupa blok seragam
-        text = pytesseract.image_to_string(img, lang='ind+eng')
+        # Jalankan Gemini OCR
+        # Kita mengirimkan data gambar dan prompt ke Gemini
+        response = model.generate_content([
+            "Ekstrak semua teks dari gambar ini seakurat mungkin. Berikan hanya teks hasil ekstraksi tanpa tambahan komentar apa pun.",
+            {"mime_type": file.content_type, "data": image_data}
+        ])
         
-        log_event("ocr_service", f"OCR Successful for {file.filename}")
+        text = response.text
+        
+        log_event("ocr_service", f"OCR Successful (Gemini) for {file.filename}")
         return jsonify({"text": text.strip()}), 200
     except Exception as e:
-        log_event("ocr_service", f"OCR Failed: {str(e)}")
+        log_event("ocr_service", f"OCR Failed (Gemini): {str(e)}")
         return jsonify({"error": f"OCR processing failed: {str(e)}"}), 500

@@ -9,3 +9,5 @@ class Config:
     COLLECTION_NAME = os.getenv("COLLECTION_NAME", "instagram_events") # Default untuk insight service
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key")
     MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "your-mistral-api-key")
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "your-gemini-api-key")
+    TESSERACT_PATH = os.getenv("TESSERACT_PATH", r"C:\Program Files\Tesseract-OCR\tesseract.exe")
