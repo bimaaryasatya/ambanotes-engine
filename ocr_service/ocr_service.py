@@ -1,8 +1,13 @@
+import os
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from flask import Blueprint, jsonify, request
 from common.logger import log_event
+from common.jwt_utils import token_required
 from common.config import Config
 import google.generativeai as genai
-import io
 
 # Konfigurasi Gemini API
 genai.configure(api_key=Config.GEMINI_API_KEY)
@@ -10,13 +15,17 @@ model = genai.GenerativeModel('gemini-flash-latest')
 
 ocr_bp = Blueprint('ocr', __name__)
 
+
 @ocr_bp.route('/extract-text', methods=['POST'])
-def extract_text():
+@token_required
+def extract_text(current_user):
     """
     Extract text from image file
     ---
     tags:
       - OCR
+    security:
+      - BearerAuth: []
     consumes:
       - multipart/form-data
     parameters:
@@ -33,27 +42,25 @@ def extract_text():
           properties:
             text:
               type: string
+      400:
+        description: No file provided
+      401:
+        description: Unauthorized
     """
     if 'file' not in request.files:
         log_event("ocr_service", "No file found in request")
         return jsonify({"error": "No file uploaded"}), 400
-    
+
     file = request.files['file']
-    log_event("ocr_service", f"Processing file: {file.filename}")
-    
+    log_event("ocr_service", f"Processing file: {file.filename} for user: {current_user.get('username')}")
+
     try:
-        # Baca stream file
         image_data = file.read()
-        
-        # Jalankan Gemini OCR
-        # Kita mengirimkan data gambar dan prompt ke Gemini
         response = model.generate_content([
             "Ekstrak semua teks dari gambar ini seakurat mungkin. Berikan hanya teks hasil ekstraksi tanpa tambahan komentar apa pun.",
             {"mime_type": file.content_type, "data": image_data}
         ])
-        
         text = response.text
-        
         log_event("ocr_service", f"OCR Successful (Gemini) for {file.filename}")
         return jsonify({"text": text.strip()}), 200
     except Exception as e:

@@ -5,26 +5,32 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Blueprint, jsonify, request
+from common.logger import log_event
+from common.jwt_utils import token_required, role_required
+
 import requests
 from common.db import docs_col
-from common.logger import log_event
 import uuid
 import datetime
 
 document_bp = Blueprint('document', __name__)
 
-# Base URL Gateway (karena kita jalan di satu port yang sama)
+# Base URL Gateway
 GATEWAY_URL = "http://localhost:5009"
 
+def _get_auth_header():
+    """Ambil Authorization header dari request yang sedang aktif untuk diteruskan ke service internal."""
+    return {"Authorization": request.headers.get("Authorization", "")}
+
+
 def process_ai_pipeline(text):
-    """Fungsi helper untuk menjalankan Klasifikasi dan NER"""
+    """Fungsi helper untuk menjalankan Klasifikasi dan NER (meneruskan token auth)."""
+    headers = _get_auth_header()
     try:
-        # 1. Klasifikasi
-        class_res = requests.post(f"{GATEWAY_URL}/classification/predict", json={"text": text})
+        class_res = requests.post(f"{GATEWAY_URL}/classification/predict", json={"text": text}, headers=headers)
         classification = class_res.json() if class_res.status_code == 200 else {"label": "Unknown"}
 
-        # 2. NER
-        ner_res = requests.post(f"{GATEWAY_URL}/ner/extract", json={"text": text})
+        ner_res = requests.post(f"{GATEWAY_URL}/ner/extract", json={"text": text}, headers=headers)
         entities = ner_res.json() if ner_res.status_code == 200 else {}
 
         return classification, entities
@@ -32,13 +38,17 @@ def process_ai_pipeline(text):
         log_event("document_service", f"AI Pipeline error: {str(e)}")
         return {"label": "Error"}, {}
 
+
 @document_bp.route('/upload', methods=['POST'])
-def upload_document():
+@token_required
+def upload_document(current_user):
     """
     Upload and Process Image File (OCR -> Classify -> NER)
     ---
     tags:
       - Document
+    security:
+      - BearerAuth: []
     consumes:
       - multipart/form-data
     parameters:
@@ -50,29 +60,29 @@ def upload_document():
     responses:
       201:
         description: File processed and data saved successfully
+      400:
+        description: No file provided
+      401:
+        description: Unauthorized - invalid or missing token
     """
-    log_event("document_service", "Starting file upload and processing")
-    
+    log_event("document_service", f"Upload by user: {current_user.get('username')}")
+
     if 'file' not in request.files:
         return jsonify({"error": "No file provided"}), 400
-    
+
     file = request.files['file']
 
-    # 1. Kirim file ke OCR Service
     try:
-        # Gunakan 'files' parameter di requests untuk mengirim stream file
         files = {'file': (file.filename, file.stream, file.mimetype)}
-        ocr_res = requests.post(f"{GATEWAY_URL}/ocr/extract-text", files=files)
+        ocr_res = requests.post(f"{GATEWAY_URL}/ocr/extract-text", files=files, headers=_get_auth_header())
         ocr_res.raise_for_status()
         extracted_text = ocr_res.json().get("text", "")
     except Exception as e:
         log_event("document_service", f"OCR request failed: {str(e)}")
         return jsonify({"error": f"OCR failed: {str(e)}"}), 500
 
-    # 2. Jalankan Pipeline AI (Klasifikasi & NER)
     classification, entities = process_ai_pipeline(extracted_text)
 
-    # 3. Simpan ke MongoDB
     doc_data = {
         "doc_id": uuid.uuid4().hex,
         "filename": file.filename,
@@ -80,22 +90,53 @@ def upload_document():
         "classification": classification,
         "entities": entities,
         "uploaded_at": datetime.datetime.utcnow(),
+        "uploaded_by": current_user.get("user_id"),
+        "org_id": current_user.get("org_id"),
         "status": "processed"
     }
-    
+
     docs_col.insert_one(doc_data)
     doc_data.pop('_id', None)
-    
+
     log_event("document_service", f"File processed and saved: {file.filename}")
     return jsonify(doc_data), 201
 
-@document_bp.route('/<doc_id>', methods=['DELETE'])
-def delete_document(doc_id):
+
+@document_bp.route('/list', methods=['GET'])
+@token_required
+def list_documents(current_user):
     """
-    Delete Document by ID
+    List all processed documents (filtered by organization)
     ---
     tags:
       - Document
+    security:
+      - BearerAuth: []
+    responses:
+      200:
+        description: List of documents belonging to the user's organization
+      401:
+        description: Unauthorized
+    """
+    org_id = current_user.get("org_id")
+    docs = list(docs_col.find({"org_id": org_id}))
+    for doc in docs:
+        doc.pop('_id', None)
+    log_event("document_service", f"Listed docs for org: {org_id}")
+    return jsonify(docs), 200
+
+
+@document_bp.route('/<doc_id>', methods=['DELETE'])
+@token_required
+@role_required('owner')
+def delete_document(current_user, doc_id):
+    """
+    Delete Document by ID (only owner role)
+    ---
+    tags:
+      - Document
+    security:
+      - BearerAuth: []
     parameters:
       - name: doc_id
         in: path
@@ -111,35 +152,39 @@ def delete_document(doc_id):
             message:
               type: string
               example: Document deleted
+      401:
+        description: Unauthorized
+      403:
+        description: Forbidden - owner role required
       404:
         description: Document not found
-        schema:
-          type: object
-          properties:
-            error:
-              type: string
-              example: Document not found
     """
-    log_event("document_service", f"Delete request for doc_id: {doc_id}")
-    result = docs_col.delete_one({"doc_id": doc_id})
+    log_event("document_service", f"Delete request for doc_id: {doc_id} by {current_user.get('username')}")
+    org_id = current_user.get("org_id")
+    result = docs_col.delete_one({"doc_id": doc_id, "org_id": org_id})
     if result.deleted_count:
         log_event("document_service", f"Document deleted: {doc_id}")
         return jsonify({"message": "Document deleted"}), 200
-    log_event("document_service", f"Document not found for delete: {doc_id}")
+    log_event("document_service", f"Document not found or not in org for delete: {doc_id}")
     return jsonify({"error": "Document not found"}), 404
 
+
 @document_bp.route('/replace/<doc_id>', methods=['PUT'])
-def replace_document(doc_id):
+@token_required
+def replace_document(current_user, doc_id):
     """
     Replace and Re-process Document
     ---
     tags:
       - Document
+    security:
+      - BearerAuth: []
     description: >
       Replace an existing document by providing either a new image file
       (which will be re-processed through OCR) or raw text.
       The document will be re-classified and re-analyzed for entities.
       If a file is provided, it takes priority over the text field.
+      Only documents belonging to the user's organization can be updated.
     consumes:
       - multipart/form-data
     parameters:
@@ -161,59 +206,34 @@ def replace_document(doc_id):
     responses:
       200:
         description: Document updated and re-processed successfully
-        schema:
-          type: object
-          properties:
-            message:
-              type: string
-              example: Document updated and re-processed
-            doc_id:
-              type: string
-            classification:
-              type: object
-            entities:
-              type: object
       400:
         description: No file or text provided
-        schema:
-          type: object
-          properties:
-            error:
-              type: string
-              example: Either a file or text must be provided
+      401:
+        description: Unauthorized
       404:
         description: Document not found
-        schema:
-          type: object
-          properties:
-            error:
-              type: string
-              example: Document not found
     """
-    log_event("document_service", f"Replace request for doc_id: {doc_id}")
+    log_event("document_service", f"Replace request for doc_id: {doc_id} by {current_user.get('username')}")
+    org_id = current_user.get("org_id")
 
-    # Check if document exists first
-    existing = docs_col.find_one({"doc_id": doc_id})
+    existing = docs_col.find_one({"doc_id": doc_id, "org_id": org_id})
     if not existing:
-        log_event("document_service", f"Document not found for replace: {doc_id}")
         return jsonify({"error": "Document not found"}), 404
 
     new_text = ""
     new_filename = existing.get("filename", "")
 
-    # Priority 1: File upload -> re-OCR
     if 'file' in request.files and request.files['file'].filename:
         file = request.files['file']
         new_filename = file.filename
         try:
             files = {'file': (file.filename, file.stream, file.mimetype)}
-            ocr_res = requests.post(f"{GATEWAY_URL}/ocr/extract-text", files=files)
+            ocr_res = requests.post(f"{GATEWAY_URL}/ocr/extract-text", files=files, headers=_get_auth_header())
             ocr_res.raise_for_status()
             new_text = ocr_res.json().get("text", "")
         except Exception as e:
             log_event("document_service", f"OCR request failed during replace: {str(e)}")
             return jsonify({"error": f"OCR failed: {str(e)}"}), 500
-    # Priority 2: Text from form or JSON body
     elif request.form.get("text"):
         new_text = request.form.get("text")
     elif request.json and request.json.get("text"):
@@ -222,20 +242,19 @@ def replace_document(doc_id):
     if not new_text:
         return jsonify({"error": "Either a file or text must be provided"}), 400
 
-    # Re-run AI Pipeline
     classification, entities = process_ai_pipeline(new_text)
 
-    # Update Database
     update_data = {
         "filename": new_filename,
         "content": new_text,
         "classification": classification,
         "entities": entities,
         "updated_at": datetime.datetime.utcnow(),
+        "updated_by": current_user.get("user_id"),
         "status": "re-processed"
     }
 
-    docs_col.update_one({"doc_id": doc_id}, {"$set": update_data})
+    docs_col.update_one({"doc_id": doc_id, "org_id": org_id}, {"$set": update_data})
     log_event("document_service", f"Document replaced and re-processed: {doc_id}")
 
     return jsonify({
@@ -246,18 +265,6 @@ def replace_document(doc_id):
         "entities": entities
     }), 200
 
-@document_bp.route('/list', methods=['GET'])
-def list_documents():
-    """
-    List all processed documents
-    ---
-    tags:
-      - Document
-    """
-    docs = list(docs_col.find())
-    for doc in docs:
-        doc.pop('_id', None) # Hapus ID MongoDB agar bisa di-JSON-kan
-    return jsonify(docs), 200
 
 @document_bp.route('/health', methods=['GET'])
 def health_check():

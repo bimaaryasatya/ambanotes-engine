@@ -1,23 +1,27 @@
 import os
 import sys
 
-# Add parent directory to path so we can import from common
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Blueprint, request, jsonify
 import requests
 from common.config import Config
 from common.logger import log_event
+from common.jwt_utils import token_required
 
 ai_bp = Blueprint('ai', __name__)
 
+
 @ai_bp.route("/summarize", methods=["POST"])
-def summarize():
+@token_required
+def summarize(current_user):
     """
     Summarize document text with Mistral AI
     ---
     tags:
       - AI
+    security:
+      - BearerAuth: []
     parameters:
       - name: body
         in: body
@@ -31,14 +35,18 @@ def summarize():
     responses:
       200:
         description: Summary generated successfully
+      400:
+        description: No text provided
+      401:
+        description: Unauthorized
       500:
         description: Error processing request
     """
-    log_event("ai_service", "Generating summary with Mistral AI")
+    log_event("ai_service", f"Summarize request from: {current_user.get('username')}")
     try:
         data = request.json
         text = data.get("text", "")
-        
+
         if not text:
             return jsonify({"error": "No text provided"}), 400
 
@@ -52,7 +60,7 @@ def summarize():
                 "messages": [{"role": "user", "content": prompt}]
             }
         )
-        
+
         response.raise_for_status()
         result = response.json()
         summary = result['choices'][0]['message']['content']
@@ -64,13 +72,17 @@ def summarize():
         log_event("ai_service", f"Summarization error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+
 @ai_bp.route("/chat", methods=["POST"])
-def chat():
+@token_required
+def chat(current_user):
     """
     Chatbot endpoint using Mistral AI
     ---
     tags:
       - AI
+    security:
+      - BearerAuth: []
     parameters:
       - name: body
         in: body
@@ -87,8 +99,10 @@ def chat():
     responses:
       200:
         description: Chat response generated
+      401:
+        description: Unauthorized
     """
-    log_event("ai_service", "Chat request received")
+    log_event("ai_service", f"Chat request from: {current_user.get('username')}")
     try:
         data = request.json
         user_message = data.get("message", "")
@@ -97,7 +111,7 @@ def chat():
         messages = []
         if context:
             messages.append({"role": "system", "content": f"Anda adalah asisten cerdas AmbaNotes. Gunakan konteks dokumen berikut untuk menjawab: {context}"})
-        
+
         messages.append({"role": "user", "content": user_message})
 
         response = requests.post(
@@ -108,7 +122,7 @@ def chat():
                 "messages": messages
             }
         )
-        
+
         response.raise_for_status()
         result = response.json()
         answer = result['choices'][0]['message']['content']

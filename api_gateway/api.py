@@ -36,7 +36,19 @@ swagger_config = {
     "swagger_ui": True,
     "specs_route": "/apidocs/"
 }
-swagger = Swagger(app, config=swagger_config)
+
+swagger_template = {
+    "securityDefinitions": {
+        "BearerAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header",
+            "description": "Masukkan token JWT dengan format: **Bearer &lt;token&gt;**"
+        }
+    }
+}
+
+swagger = Swagger(app, config=swagger_config, template=swagger_template)
 
 # Register Blueprints with url prefixes
 app.register_blueprint(classification_bp, url_prefix='/classification')

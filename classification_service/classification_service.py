@@ -1,16 +1,15 @@
 import os
 import sys
 
-# Add parent directory to path so we can import from common
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Blueprint, request, jsonify
-from transformers import pipeline, AutoModelForSequenceClassification, AutoTokenizer
 from common.logger import log_event
+from common.jwt_utils import token_required
+from transformers import pipeline, AutoModelForSequenceClassification, AutoTokenizer
 
 classification_bp = Blueprint('classification', __name__)
 
-# Mapping Label (Sesuaikan dengan urutan label saat Anda melatih model)
 LABEL_MAPPING = {
     "LABEL_0": "Surat Undangan",
     "LABEL_1": "Surat Permohonan",
@@ -19,7 +18,6 @@ LABEL_MAPPING = {
     "LABEL_4": "Surat Edaran"
 }
 
-# Load Model
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models", "surat_model")
 
 try:
@@ -32,13 +30,17 @@ except Exception as e:
     log_event("classification_service", f"Failed to load model: {str(e)}")
     classifier = None
 
+
 @classification_bp.route('/predict', methods=['POST'])
-def predict():
+@token_required
+def predict(current_user):
     """
     Classify a document text.
     ---
     tags:
       - Classification
+    security:
+      - BearerAuth: []
     parameters:
       - name: body
         in: body
@@ -52,21 +54,16 @@ def predict():
     responses:
       200:
         description: Successful prediction
-        schema:
-          type: object
-          properties:
-            label:
-              type: string
-            score:
-              type: number
       400:
         description: Bad request
+      401:
+        description: Unauthorized
       500:
         description: Model not loaded or internal error
     """
-    log_event("classification_service", "Received predict request")
+    log_event("classification_service", f"Predict request from: {current_user.get('username')}")
+
     if classifier is None:
-        log_event("classification_service", "Prediction failed: Model is not loaded")
         return jsonify({"error": "Model is not loaded"}), 500
 
     data = request.json
@@ -76,10 +73,8 @@ def predict():
     text = data['text']
     try:
         result = classifier(text)[0]
-        # Translate label if it exists in mapping
         original_label = result.get('label')
         result['label_name'] = LABEL_MAPPING.get(original_label, "Unknown")
-        
         log_event("classification_service", f"Prediction successful: {result}")
         return jsonify(result), 200
     except Exception as e:
