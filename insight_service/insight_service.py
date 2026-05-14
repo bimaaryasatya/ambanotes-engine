@@ -1,17 +1,22 @@
-from flask import Flask, jsonify
-from flask_cors import CORS
-from flasgger import Swagger
-from services.analytics_service import generate_insight
+import os
+import sys
 
-app = Flask(__name__)
-CORS(app)
-swagger = Swagger(app)
+# Add parent directory to path so we can import from common if run directly
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-@app.route("/")
+from flask import Blueprint, jsonify
+from insight_service.services.analytics_service import generate_insight
+from common.logger import log_event
+
+insight_bp = Blueprint('insight', __name__)
+
+@insight_bp.route("/")
 def home():
     """
-    Home Endpoint
+    Insight Home Endpoint
     ---
+    tags:
+      - Insight
     responses:
       200:
         description: Welcome message
@@ -22,15 +27,18 @@ def home():
               type: string
               example: Instagram Event Insight API
     """
+    log_event("insight_service", "Home endpoint accessed")
     return jsonify({
         "message": "Instagram Event Insight API"
     })
 
-@app.route("/api/insights", methods=["GET"])
+@insight_bp.route("/api/insights", methods=["GET"])
 def insights():
     """
     Get Instagram Event Insights
     ---
+    tags:
+      - Insight
     responses:
       200:
         description: Detailed insights from Instagram data
@@ -76,19 +84,14 @@ def insights():
               type: string
               example: "Something went wrong"
     """
+    log_event("insight_service", "Fetching insights")
     try:
         data = generate_insight()
+        log_event("insight_service", "Insights generated successfully")
         return jsonify(data), 200
 
     except Exception as e:
+        log_event("insight_service", f"Failed to generate insights: {str(e)}")
         return jsonify({
             "error": str(e)
         }), 500
-
-
-if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=5005,
-        debug=True
-    )

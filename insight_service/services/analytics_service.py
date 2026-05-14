@@ -1,5 +1,5 @@
-from utils.text_cleaner import clean_text
-from services.mongo_service import get_dataframe
+from insight_service.utils.text_cleaner import clean_text
+from insight_service.services.mongo_service import get_dataframe
 import pandas as pd
 
 

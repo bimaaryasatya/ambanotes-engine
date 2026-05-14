@@ -1,27 +1,15 @@
 import jwt
 from datetime import datetime, timedelta
-from .config import Config
+from config import Config
 
-def encode_auth_token(user_id):
-    try:
-        payload = {
-            'exp': datetime.utcnow() + timedelta(days=1),
-            'iat': datetime.utcnow(),
-            'sub': user_id
-        }
-        return jwt.encode(
-            payload,
-            Config.JWT_SECRET_KEY,
-            algorithm='HS256'
-        )
-    except Exception as e:
-        return str(e)
+def generate_token(user):
+    payload = {
+        "user_id": str(user["_id"]),
+        "role": user["role"],
+        "org_id": user.get("org_id"),
+        "exp": datetime.utcnow() + timedelta(days=1)
+    }
+    return jwt.encode(payload, Config.JWT_SECRET, algorithm="HS256")
 
-def decode_auth_token(auth_token):
-    try:
-        payload = jwt.decode(auth_token, Config.JWT_SECRET_KEY, algorithms=['HS256'])
-        return payload['sub']
-    except jwt.ExpiredSignatureError:
-        return 'Signature expired. Please log in again.'
-    except jwt.InvalidTokenError:
-        return 'Invalid token. Please log in again.'
+def verify_token(token):
+    return jwt.decode(token, Config.JWT_SECRET, algorithms=["HS256"])
