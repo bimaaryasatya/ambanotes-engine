@@ -10,15 +10,15 @@ from transformers import pipeline
 
 # Load NER Pipeline menggunakan IndoBERT
 try:
-    log_event("ner_service", "Loading IndoBERT NER model...")
+    log_event("ner_service", "Loading IndoBERT NER model...", action="MODEL_LOAD_START")
     ner_pipeline = pipeline(
         "ner",
         model="cahya/bert-base-indonesian-NER",
         aggregation_strategy="simple"
     )
-    log_event("ner_service", "IndoBERT NER model loaded successfully")
+    log_event("ner_service", "IndoBERT NER model loaded successfully", action="MODEL_LOAD_SUCCESS")
 except Exception as e:
-    log_event("ner_service", f"Failed to load NER model: {str(e)}")
+    log_event("ner_service", f"Failed to load NER model: {str(e)}", action="MODEL_LOAD_FAILED", metadata={"error": str(e)})
     ner_pipeline = None
 
 ner_bp = Blueprint('ner', __name__)
@@ -52,7 +52,10 @@ def extract_entities(current_user):
       401:
         description: Unauthorized
     """
-    data = request.json
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+
+    data = request.json or {}
     text = data.get('text', '')
 
     if not text:
@@ -79,10 +82,12 @@ def extract_entities(current_user):
                 if f"ORG: {word}" not in result['others']:
                     result['others'].append(f"ORG: {word}")
 
-        log_event("ner_service", f"Extraction successful: {len(entities)} entities found")
+        log_event("ner_service", f"Extraction successful: {len(entities)} entities found",
+                  user_id=user_id, org_id=org_id, action="NER_SUCCESS", metadata={"entity_count": len(entities)})
         return jsonify(result), 200
     except Exception as e:
-        log_event("ner_service", f"Extraction failed: {str(e)}")
+        log_event("ner_service", f"Extraction failed: {str(e)}",
+                  user_id=user_id, org_id=org_id, action="NER_FAILED", metadata={"error": str(e)})
         return jsonify({"error": str(e)}), 500
 
 

@@ -47,12 +47,16 @@ def extract_text(current_user):
       401:
         description: Unauthorized
     """
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+
     if 'file' not in request.files:
-        log_event("ocr_service", "No file found in request")
+        log_event("ocr_service", "No file found in request", user_id=user_id, org_id=org_id, action="OCR_MISSING_FILE")
         return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files['file']
-    log_event("ocr_service", f"Processing file: {file.filename} for user: {current_user.get('username')}")
+    log_event("ocr_service", f"Processing file: {file.filename} for user: {current_user.get('username')}",
+              user_id=user_id, org_id=org_id, action="OCR_START", metadata={"filename": file.filename})
 
     try:
         image_data = file.read()
@@ -61,8 +65,10 @@ def extract_text(current_user):
             {"mime_type": file.content_type, "data": image_data}
         ])
         text = response.text
-        log_event("ocr_service", f"OCR Successful (Gemini) for {file.filename}")
+        log_event("ocr_service", f"OCR Successful (Gemini) for {file.filename}",
+                  user_id=user_id, org_id=org_id, action="OCR_SUCCESS", metadata={"filename": file.filename})
         return jsonify({"text": text.strip()}), 200
     except Exception as e:
-        log_event("ocr_service", f"OCR Failed (Gemini): {str(e)}")
+        log_event("ocr_service", f"OCR Failed (Gemini): {str(e)}",
+                  user_id=user_id, org_id=org_id, action="OCR_FAILED", metadata={"error": str(e)})
         return jsonify({"error": f"OCR processing failed: {str(e)}"}), 500

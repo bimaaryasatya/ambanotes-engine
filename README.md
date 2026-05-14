@@ -58,7 +58,7 @@ Aplikasi ini menggunakan pola **API Gateway** dengan **Flask Blueprints**, di ma
 
 | Fitur | Deskripsi | Teknologi |
 |:------|:----------|:----------|
-| 🔐 **Autentikasi** | Registrasi, login, manajemen organisasi dengan invitation code | JWT + Werkzeug |
+| 🔐 **Autentikasi** | Registrasi, login, manajemen organisasi (Invitation System & RBAC) | JWT + Werkzeug |
 | 📄 **Manajemen Dokumen** | Upload, simpan, dan kelola file dokumen surat | MongoDB GridFS |
 | 📋 **Klasifikasi Surat** | Klasifikasi otomatis jenis surat (Undangan, Permohonan, Tugas, Keputusan, Edaran) | HuggingFace Transformers + SafeTensors |
 | 👁️ **OCR** | Ekstraksi teks dari gambar dokumen | Google Gemini API |
@@ -239,6 +239,11 @@ Server akan berjalan di:
 |:-------|:---------|:----------|
 | `POST` | `/auth/register` | Registrasi user baru (create/join org) |
 | `POST` | `/auth/login` | Login & dapatkan JWT token |
+| `DELETE` | `/auth/members/<id>` | Hapus member (Role: Admin) |
+| `POST` | `/auth/invite` | Kirim undangan ke email (Role: Owner) |
+| `GET` | `/auth/invitations` | Lihat daftar undangan masuk |
+| `POST` | `/auth/invitations/<id>/accept` | Terima undangan bergabung |
+| `POST` | `/auth/invitations/<id>/reject` | Tolak undangan bergabung |
 | `GET` | `/auth/health` | Health check auth service |
 
 ### 📄 Document Service (`/document`)
@@ -253,7 +258,7 @@ Server akan berjalan di:
 
 | Method | Endpoint | Deskripsi |
 |:-------|:---------|:----------|
-| `POST` | `/classification/predict` | Klasifikasi jenis surat dari teks |
+| `POST` | `/classification/predict` | Klasifikasi jenis surat (Hybrid: local/gemini) |
 
 ### 👁️ OCR Service (`/ocr`)
 
@@ -349,6 +354,7 @@ curl -X POST http://localhost:5009/ai/summarize \
 | `organizations` | Data organisasi | `name`, `invitation_code`, `created_at` |
 | `documents` | Dokumen tersimpan | `title`, `content`, `type`, `org_id` |
 | `logs` | Log aktivitas sistem | `service`, `message`, `timestamp` |
+| `invitations` | Data undangan | `email`, `org_id`, `status`, `role` |
 
 ---
 

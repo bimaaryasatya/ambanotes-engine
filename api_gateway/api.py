@@ -76,10 +76,10 @@ def health_check():
       200:
         description: API Gateway is healthy
     """
-    log_event("api_gateway", "Gateway health check requested")
+    log_event("api_gateway", "Gateway health check requested", action="HEALTH_CHECK")
     return jsonify({"status": "healthy", "service": "api_gateway"}), 200
 
 if __name__ == '__main__':
-    log_event("api_gateway", "Starting Unified API Gateway")
+    log_event("api_gateway", "Starting Unified API Gateway", action="GATEWAY_START")
     # Run all services on a single port
     app.run(host='0.0.0.0', port=5009, debug=True)

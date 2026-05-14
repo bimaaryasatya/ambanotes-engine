@@ -35,7 +35,7 @@ def process_ai_pipeline(text):
 
         return classification, entities
     except Exception as e:
-        log_event("document_service", f"AI Pipeline error: {str(e)}")
+        log_event("document_service", f"AI Pipeline error: {str(e)}", action="AI_PIPELINE_ERROR", metadata={"error": str(e)})
         return {"label": "Error"}, {}
 
 
@@ -65,7 +65,11 @@ def upload_document(current_user):
       401:
         description: Unauthorized - invalid or missing token
     """
-    log_event("document_service", f"Upload by user: {current_user.get('username')}")
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+    
+    log_event("document_service", f"Upload started by user: {current_user.get('username')}", 
+              user_id=user_id, org_id=org_id, action="DOC_UPLOAD_START")
 
     if 'file' not in request.files:
         return jsonify({"error": "No file provided"}), 400
@@ -78,27 +82,32 @@ def upload_document(current_user):
         ocr_res.raise_for_status()
         extracted_text = ocr_res.json().get("text", "")
     except Exception as e:
-        log_event("document_service", f"OCR request failed: {str(e)}")
+        log_event("document_service", f"OCR request failed: {str(e)}", 
+                  user_id=user_id, org_id=org_id, action="DOC_OCR_FAILED", metadata={"error": str(e)})
         return jsonify({"error": f"OCR failed: {str(e)}"}), 500
 
     classification, entities = process_ai_pipeline(extracted_text)
 
+    doc_id = uuid.uuid4().hex
     doc_data = {
-        "doc_id": uuid.uuid4().hex,
+        "doc_id": doc_id,
         "filename": file.filename,
         "content": extracted_text,
         "classification": classification,
         "entities": entities,
         "uploaded_at": datetime.datetime.utcnow(),
-        "uploaded_by": current_user.get("user_id"),
-        "org_id": current_user.get("org_id"),
+        "uploaded_by": user_id,
+        "org_id": org_id,
         "status": "processed"
     }
 
     docs_col.insert_one(doc_data)
     doc_data.pop('_id', None)
 
-    log_event("document_service", f"File processed and saved: {file.filename}")
+    log_event("document_service", f"File processed and saved: {file.filename}", 
+              user_id=user_id, org_id=org_id, action="DOC_UPLOAD_SUCCESS", 
+              metadata={"doc_id": doc_id, "filename": file.filename})
+              
     return jsonify(doc_data), 201
 
 
@@ -122,7 +131,10 @@ def list_documents(current_user):
     docs = list(docs_col.find({"org_id": org_id}))
     for doc in docs:
         doc.pop('_id', None)
-    log_event("document_service", f"Listed docs for org: {org_id}")
+        
+    log_event("document_service", f"Listed docs for org: {org_id}", 
+              user_id=current_user.get("user_id"), org_id=org_id, action="DOC_LIST_VIEW")
+              
     return jsonify(docs), 200
 
 
@@ -146,12 +158,6 @@ def delete_document(current_user, doc_id):
     responses:
       200:
         description: Document deleted successfully
-        schema:
-          type: object
-          properties:
-            message:
-              type: string
-              example: Document deleted
       401:
         description: Unauthorized
       403:
@@ -159,13 +165,20 @@ def delete_document(current_user, doc_id):
       404:
         description: Document not found
     """
-    log_event("document_service", f"Delete request for doc_id: {doc_id} by {current_user.get('username')}")
+    user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
+    
+    log_event("document_service", f"Delete request for doc_id: {doc_id} by {current_user.get('username')}",
+              user_id=user_id, org_id=org_id, action="DOC_DELETE_REQUEST", metadata={"doc_id": doc_id})
+
     result = docs_col.delete_one({"doc_id": doc_id, "org_id": org_id})
     if result.deleted_count:
-        log_event("document_service", f"Document deleted: {doc_id}")
+        log_event("document_service", f"Document deleted: {doc_id}", 
+                  user_id=user_id, org_id=org_id, action="DOC_DELETE_SUCCESS", metadata={"doc_id": doc_id})
         return jsonify({"message": "Document deleted"}), 200
-    log_event("document_service", f"Document not found or not in org for delete: {doc_id}")
+        
+    log_event("document_service", f"Document not found or not in org for delete: {doc_id}",
+              user_id=user_id, org_id=org_id, action="DOC_DELETE_FAILED", metadata={"doc_id": doc_id})
     return jsonify({"error": "Document not found"}), 404
 
 
@@ -213,8 +226,11 @@ def replace_document(current_user, doc_id):
       404:
         description: Document not found
     """
-    log_event("document_service", f"Replace request for doc_id: {doc_id} by {current_user.get('username')}")
+    user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
+    
+    log_event("document_service", f"Replace request for doc_id: {doc_id} by {current_user.get('username')}",
+              user_id=user_id, org_id=org_id, action="DOC_REPLACE_REQUEST", metadata={"doc_id": doc_id})
 
     existing = docs_col.find_one({"doc_id": doc_id, "org_id": org_id})
     if not existing:
@@ -232,7 +248,8 @@ def replace_document(current_user, doc_id):
             ocr_res.raise_for_status()
             new_text = ocr_res.json().get("text", "")
         except Exception as e:
-            log_event("document_service", f"OCR request failed during replace: {str(e)}")
+            log_event("document_service", f"OCR request failed during replace: {str(e)}",
+                      user_id=user_id, org_id=org_id, action="DOC_REPLACE_OCR_FAILED")
             return jsonify({"error": f"OCR failed: {str(e)}"}), 500
     elif request.form.get("text"):
         new_text = request.form.get("text")
@@ -250,12 +267,14 @@ def replace_document(current_user, doc_id):
         "classification": classification,
         "entities": entities,
         "updated_at": datetime.datetime.utcnow(),
-        "updated_by": current_user.get("user_id"),
+        "updated_by": user_id,
         "status": "re-processed"
     }
 
     docs_col.update_one({"doc_id": doc_id, "org_id": org_id}, {"$set": update_data})
-    log_event("document_service", f"Document replaced and re-processed: {doc_id}")
+    
+    log_event("document_service", f"Document replaced and re-processed: {doc_id}",
+              user_id=user_id, org_id=org_id, action="DOC_REPLACE_SUCCESS", metadata={"doc_id": doc_id})
 
     return jsonify({
         "message": "Document updated and re-processed",

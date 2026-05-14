@@ -42,9 +42,13 @@ def summarize(current_user):
       500:
         description: Error processing request
     """
-    log_event("ai_service", f"Summarize request from: {current_user.get('username')}")
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+
+    log_event("ai_service", f"Summarize request from: {current_user.get('username')}",
+              user_id=user_id, org_id=org_id, action="AI_SUMMARIZE_START")
     try:
-        data = request.json
+        data = request.json or {}
         text = data.get("text", "")
 
         if not text:
@@ -65,11 +69,13 @@ def summarize(current_user):
         result = response.json()
         summary = result['choices'][0]['message']['content']
 
-        log_event("ai_service", "Summary generated successfully")
+        log_event("ai_service", "Summary generated successfully",
+                  user_id=user_id, org_id=org_id, action="AI_SUMMARIZE_SUCCESS")
         return jsonify({"summary": summary}), 200
 
     except Exception as e:
-        log_event("ai_service", f"Summarization error: {str(e)}")
+        log_event("ai_service", f"Summarization error: {str(e)}",
+                  user_id=user_id, org_id=org_id, action="AI_SUMMARIZE_FAILED", metadata={"error": str(e)})
         return jsonify({"error": str(e)}), 500
 
 
@@ -102,9 +108,13 @@ def chat(current_user):
       401:
         description: Unauthorized
     """
-    log_event("ai_service", f"Chat request from: {current_user.get('username')}")
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+
+    log_event("ai_service", f"Chat request from: {current_user.get('username')}",
+              user_id=user_id, org_id=org_id, action="AI_CHAT_START")
     try:
-        data = request.json
+        data = request.json or {}
         user_message = data.get("message", "")
         context = data.get("context", "")
 
@@ -127,8 +137,11 @@ def chat(current_user):
         result = response.json()
         answer = result['choices'][0]['message']['content']
 
+        log_event("ai_service", "Chat response generated",
+                  user_id=user_id, org_id=org_id, action="AI_CHAT_SUCCESS")
         return jsonify({"answer": answer}), 200
 
     except Exception as e:
-        log_event("ai_service", f"Chat error: {str(e)}")
+        log_event("ai_service", f"Chat error: {str(e)}",
+                  user_id=user_id, org_id=org_id, action="AI_CHAT_FAILED", metadata={"error": str(e)})
         return jsonify({"error": str(e)}), 500

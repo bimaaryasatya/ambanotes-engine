@@ -20,5 +20,5 @@ def health_check():
       200:
         description: Service is healthy
     """
-    log_event("notification_service", "Health check requested")
+    log_event("notification_service", "Health check requested", action="HEALTH_CHECK")
     return jsonify({"status": "healthy", "service": "notification_service"}), 200
