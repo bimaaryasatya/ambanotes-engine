@@ -49,6 +49,10 @@ app.register_blueprint(document_bp, url_prefix='/document')
 app.register_blueprint(notification_bp, url_prefix='/notification')
 app.register_blueprint(ai_bp, url_prefix='/ai')
 
+@app.route('/', methods=['GET'])
+def index():
+    return jsonify({"message": "AmbaNotes API Gateway: Server is running"}), 200
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """

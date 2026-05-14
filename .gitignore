@@ -1,4 +1,28 @@
-venv
-__pycache__
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment Variables
 .env
+
+# AI Models (Besar & Berat)
 models/
+*.safetensors
+*.bin
+*.h5
+*.pt
+*.onnx
+
+# IDEs
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/

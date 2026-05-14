@@ -11,10 +11,10 @@ from common.logger import log_event
 
 ai_bp = Blueprint('ai', __name__)
 
-@ai_bp.route("/process", methods=["POST"])
-def process():
+@ai_bp.route("/summarize", methods=["POST"])
+def summarize():
     """
-    Process document text with Mistral AI
+    Summarize document text with Mistral AI
     ---
     tags:
       - AI
@@ -27,28 +27,22 @@ def process():
           properties:
             text:
               type: string
-              example: "Tolong rangkum dokumen ini..."
+              example: "Konten surat yang panjang..."
     responses:
       200:
-        description: AI processing results
+        description: Summary generated successfully
       500:
         description: Error processing request
     """
-    log_event("ai_service", "Processing text with AI")
+    log_event("ai_service", "Generating summary with Mistral AI")
     try:
-        text = request.json.get("text", "")
+        data = request.json
+        text = data.get("text", "")
+        
         if not text:
             return jsonify({"error": "No text provided"}), 400
 
-        prompt = f"""
-        Analisa dokumen berikut:
-        1. Klasifikasi
-        2. Ringkasan
-        3. Entity (nama, tanggal, nominal)
-
-        Text:
-        {text}
-        """
+        prompt = f"Tolong buatkan ringkasan singkat dan padat dari teks dokumen berikut ini:\n\n{text}"
 
         response = requests.post(
             "https://api.mistral.ai/v1/chat/completions",
@@ -61,14 +55,66 @@ def process():
         
         response.raise_for_status()
         result = response.json()
+        summary = result['choices'][0]['message']['content']
 
-        log_event("ai_service", "AI processing completed successfully")
-        return jsonify({
-            "classification": result,
-            "summary": result,
-            "entities": result
-        }), 200
+        log_event("ai_service", "Summary generated successfully")
+        return jsonify({"summary": summary}), 200
 
     except Exception as e:
-        log_event("ai_service", f"AI processing error: {str(e)}")
+        log_event("ai_service", f"Summarization error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@ai_bp.route("/chat", methods=["POST"])
+def chat():
+    """
+    Chatbot endpoint using Mistral AI
+    ---
+    tags:
+      - AI
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Apa isi dari surat ini?"
+            context:
+              type: string
+              example: "Isi teks surat..."
+    responses:
+      200:
+        description: Chat response generated
+    """
+    log_event("ai_service", "Chat request received")
+    try:
+        data = request.json
+        user_message = data.get("message", "")
+        context = data.get("context", "")
+
+        messages = []
+        if context:
+            messages.append({"role": "system", "content": f"Anda adalah asisten cerdas AmbaNotes. Gunakan konteks dokumen berikut untuk menjawab: {context}"})
+        
+        messages.append({"role": "user", "content": user_message})
+
+        response = requests.post(
+            "https://api.mistral.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
+            json={
+                "model": "mistral-small",
+                "messages": messages
+            }
+        )
+        
+        response.raise_for_status()
+        result = response.json()
+        answer = result['choices'][0]['message']['content']
+
+        return jsonify({"answer": answer}), 200
+
+    except Exception as e:
+        log_event("ai_service", f"Chat error: {str(e)}")
         return jsonify({"error": str(e)}), 500

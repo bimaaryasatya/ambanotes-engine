@@ -10,6 +10,15 @@ from common.logger import log_event
 
 classification_bp = Blueprint('classification', __name__)
 
+# Mapping Label (Sesuaikan dengan urutan label saat Anda melatih model)
+LABEL_MAPPING = {
+    "LABEL_0": "Surat Undangan",
+    "LABEL_1": "Surat Permohonan",
+    "LABEL_2": "Surat Tugas",
+    "LABEL_3": "Surat Keputusan",
+    "LABEL_4": "Surat Edaran"
+}
+
 # Load Model
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models", "surat_model")
 
@@ -67,6 +76,10 @@ def predict():
     text = data['text']
     try:
         result = classifier(text)[0]
+        # Translate label if it exists in mapping
+        original_label = result.get('label')
+        result['label_name'] = LABEL_MAPPING.get(original_label, "Unknown")
+        
         log_event("classification_service", f"Prediction successful: {result}")
         return jsonify(result), 200
     except Exception as e:

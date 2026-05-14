@@ -3,10 +3,7 @@ import pandas as pd
 import nltk
 from nltk.corpus import stopwords
 
-nltk.download("stopwords")
-
 stop_words = set(stopwords.words("indonesian"))
-
 
 def clean_text(text):
     if pd.isna(text):

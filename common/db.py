@@ -1,8 +1,11 @@
 from pymongo import MongoClient
-from config import Config
+from common.config import Config
 
-client = MongoClient(Config.MONGO_URI)
-db = client["document_ai"]
+def get_db_client():
+    return MongoClient(Config.MONGO_URI)
+
+client = get_db_client()
+db = client[Config.DB_NAME]
 
 users_col = db["users"]
 docs_col = db["documents"]
