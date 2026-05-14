@@ -70,6 +70,13 @@ Aplikasi ini menggunakan pola **API Gateway** dengan **Flask Blueprints**, di ma
 | **Smart Reply Draft** | Pembuatan 3 opsi draf balasan surat formal (setuju, tolak, netral) |
 | **Smart Redaction** | Sensor otomatis data sensitif (NIK, No. HP, Alamat) sesuai UU PDP |
 | **Document Translation** | Terjemahan teks ke Bahasa Indonesia formal kedinasan |
+| **Conflict Detection** | Mendeteksi konflik jadwal atau aturan antara surat baru dengan agenda eksisting |
+| **Budget Extractor** | Ekstraksi otomatis nilai nominal uang dan tujuan anggaran dari teks surat |
+| **Workflow Automation** | Saran aksi otomatis (Calendar/Reminder) berdasarkan isi surat |
+| **Predictive Analytics** | Prediksi beban kerja organisasi 3 bulan ke depan berdasarkan tren administrasi |
+| **Priority Intelligence** | Analisis sentimen, tingkat urgensi (High/Low), dan auto-tagging (#hashtag) |
+
+
 
 ### 🏢 Enterprise & Delegasi
 | Fitur | Deskripsi |
@@ -79,6 +86,8 @@ Aplikasi ini menggunakan pola **API Gateway** dengan **Flask Blueprints**, di ma
 | **Kop Surat Digital** | Upload kop surat per unit untuk digunakan dalam generator dokumen |
 | **Tanda Tangan Digital** | Upload TTD/QR Code per unit (hanya oleh Owner) |
 | **Surat Tugas Generator** | Generate surat resmi HTML lengkap dengan kop, nomor surat, dan TTD |
+| **Anti-Fraud Verify** | Sidik jari digital (hash) untuk memverifikasi keaslian surat yang di-generate |
+
 
 ### 📄 Document Processing Pipeline
 | Fitur | Deskripsi |
@@ -332,6 +341,11 @@ Server akan berjalan di:
 | `POST` | `/ai/extract-tasks` | Ekstrak agenda/tugas dari isi surat | ✅ |
 | `POST` | `/ai/generate-reply` | Generate 3 opsi draf balasan surat | ✅ |
 | `POST` | `/ai/translate` | Terjemahkan ke Bahasa Indonesia formal | ✅ |
+| `POST` | `/ai/analyze-workflow` | Deteksi konflik & saran otomasi workflow | ✅ |
+| `POST` | `/ai/extract-budget` | Ekstraksi nilai anggaran & mata uang | ✅ |
+| `POST` | `/ai/analyze-priority` | Analisis sentimen, urgensi, dan auto-tagging | ✅ |
+
+
 
 ---
 
@@ -340,6 +354,9 @@ Server akan berjalan di:
 | Method | Endpoint | Deskripsi | Auth |
 |:-------|:---------|:----------|:-----|
 | `POST` | `/generator/surat-tugas` | Generate HTML Surat Tugas (kop + TTD + nomor) | ✅ |
+| `GET` | `/generator/verify/<hash>` | Verifikasi keaslian dokumen (Anti-Fraud) | ❌ |
+| `GET` | `/generator/health` | Health check generator | ❌ |
+
 | `GET` | `/generator/health` | Health check generator | ❌ |
 
 ---
@@ -351,6 +368,8 @@ Server akan berjalan di:
 | `GET` | `/insight/` | Home insight API | ❌ |
 | `GET` | `/insight/api/insights` | Data insight & analitik | ✅ |
 | `GET` | `/insight/weekly-summary` | Laporan mingguan AI untuk pimpinan | ✅ |
+| `GET` | `/insight/predictive-trends` | Prediksi beban kerja 3 bulan ke depan | ✅ |
+
 
 ---
 
@@ -369,7 +388,11 @@ Server akan berjalan di:
 
 | Method | Endpoint | Deskripsi | Auth |
 |:-------|:---------|:----------|:-----|
+| `GET` | `/notification/` | List notifikasi user | ✅ |
+| `POST` | `/notification/read/<id>` | Tandai notifikasi sudah dibaca | ✅ |
+| `GET` | `/notification/unread-count` | Hitung jumlah notifikasi belum dibaca | ✅ |
 | `GET` | `/notification/health` | Health check notification | ❌ |
+
 
 > 💡 **Tip:** Untuk dokumentasi interaktif lengkap beserta request/response schema, buka **Swagger UI** di `http://localhost:5009/apidocs` saat server berjalan.
 
@@ -457,6 +480,8 @@ curl -X POST http://localhost:5009/generator/surat-tugas \
 | `reminders` | Pengingat/agenda | `task`, `date`, `time`, `location`, `org_id`, `is_completed` |
 | `invitations` | Undangan member | `email`, `org_id`, `status` (`pending`/`accepted`), `role` |
 | `logs` | Audit trail | `service`, `message`, `user_id`, `org_id`, `action`, `timestamp` |
+| `notifications` | Notifikasi user | `user_id`, `title`, `message`, `is_read`, `created_at` |
+
 
 ---
 

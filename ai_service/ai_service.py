@@ -10,7 +10,7 @@ import requests
 from common.config import Config
 from common.logger import log_event
 from common.jwt_utils import token_required
-from common.db import docs_col
+from common.db import docs_col, reminders_col
 
 ai_bp = Blueprint('ai', __name__)
 
@@ -817,5 +817,210 @@ def voice_intent(current_user):
         log_event("ai_service", "Voice intent extracted", user_id=user_id, org_id=org_id, action="AI_VOICE_INTENT_SUCCESS")
         return jsonify(intent_data), 200
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ai_bp.route("/analyze-workflow", methods=["POST"])
+@token_required
+def analyze_workflow(current_user):
+    """
+    AI Workflow Analysis & Conflict Detection
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+          properties:
+            text:
+              type: string
+              example: "Surat tugas Bima ke Jakarta tanggal 20 Mei 2026."
+    responses:
+      200:
+        description: Workflow analysis results with conflicts and suggestions
+    """
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+
+    try:
+        data = request.json or {}
+        text = data.get("text", "")
+        
+        # 1. Fetch existing reminders/tasks for context
+        existing_tasks = list(reminders_col.find({"org_id": org_id}).sort("date", -1).limit(10))
+        context_tasks = ""
+        for t in existing_tasks:
+            context_tasks += f"- {t['task']} pada {t['date']} {t.get('time', '')}\n"
+
+        prompt = (
+            "Anda adalah AI Auditor AmbaNotes. Tugas Anda adalah menganalisis surat baru dan mengecek konflik "
+            "dengan agenda yang sudah ada, serta memberikan saran workflow otomatis.\n\n"
+            f"AGENDA EKSISTING:\n{context_tasks}\n"
+            f"SURAT BARU:\n{text}\n\n"
+            "Hasilkan output HANYA dalam format JSON valid:\n"
+            "{\n"
+            "  \"conflicts\": [\"... list konflik jika ada ...\"],\n"
+            "  \"automation_suggestions\": [\n"
+            "    {\"action\": \"create_calendar_event\", \"data\": {...}},\n"
+            "    {\"action\": \"send_whatsapp_reminder\", \"target\": \"...\"}\n"
+            "  ],\n"
+            "  \"risk_score\": 0.0 to 1.0\n"
+            "}"
+        )
+
+        response = requests.post(
+            "https://api.mistral.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
+            json={
+                "model": "mistral-small",
+                "messages": [{"role": "user", "content": prompt}]
+            }
+        )
+        
+        response.raise_for_status()
+        content = response.json()['choices'][0]['message']['content']
+        json_match = re.search(r"\{.*\}", content, re.DOTALL)
+        analysis = json.loads(json_match.group()) if json_match else {"error": "Analysis failed"}
+
+        return jsonify(analysis), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ai_bp.route("/extract-budget", methods=["POST"])
+@token_required
+def extract_budget(current_user):
+    """
+    Extract Monetary Values & Budget Purposes
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+          properties:
+            text:
+              type: string
+              example: "Anggaran perbaikan jalan sebesar Rp 500.000.000 untuk tahun 2026."
+    responses:
+      200:
+        description: Extracted budget data
+    """
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+
+    try:
+        data = request.json or {}
+        text = data.get("text", "")
+
+        prompt = (
+            "Ekstrak semua informasi keuangan dari teks berikut.\n"
+            "Hasilkan output HANYA dalam format JSON valid (array of objects):\n"
+            "[\n"
+            "  {\"amount\": 500000, \"currency\": \"IDR\", \"purpose\": \"...\", \"year\": \"...\"}\n"
+            "]\n"
+            f"Teks:\n{text}"
+        )
+
+        response = requests.post(
+            "https://api.mistral.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
+            json={
+                "model": "mistral-small",
+                "messages": [{"role": "user", "content": prompt}]
+            }
+        )
+        
+        response.raise_for_status()
+        content = response.json()['choices'][0]['message']['content']
+        json_match = re.search(r"\[.*\]", content, re.DOTALL)
+        budget_data = json.loads(json_match.group()) if json_match else []
+
+        return jsonify(budget_data), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ai_bp.route("/analyze-priority", methods=["POST"])
+@token_required
+def analyze_priority(current_user):
+    """
+    Analyze Document Priority, Sentiment, and Auto-Tags
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+          properties:
+            text:
+              type: string
+              example: "URGENT: Perbaikan jembatan ambruk harus selesai dalam 2 hari!"
+    responses:
+      200:
+        description: Priority, Sentiment, and Tags analysis
+    """
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+
+    try:
+        data = request.json or {}
+        text = data.get("text", "")
+
+        prompt = (
+            "Analisis teks surat berikut secara mendalam.\n"
+            "Tentukan:\n"
+            "1. Urgency (High/Medium/Low)\n"
+            "2. Sentiment (Positive/Neutral/Negative/Urgent)\n"
+            "3. Tags (Maksimal 5 hashtag kategori yang relevan)\n"
+            "4. Summary_Short (Maksimal 10 kata)\n\n"
+            "Hasilkan output HANYA dalam format JSON valid:\n"
+            "{\n"
+            "  \"urgency\": \"...\",\n"
+            "  \"sentiment\": \"...\",\n"
+            "  \"tags\": [\"#tag1\", \"#tag2\"],\n"
+            "  \"brief_summary\": \"...\"\n"
+            "}\n\n"
+            f"Teks:\n{text}"
+        )
+
+        response = requests.post(
+            "https://api.mistral.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
+            json={
+                "model": "mistral-small",
+                "messages": [{"role": "user", "content": prompt}]
+            }
+        )
+        
+        response.raise_for_status()
+        content = response.json()['choices'][0]['message']['content']
+        json_match = re.search(r"\{.*\}", content, re.DOTALL)
+        analysis = json.loads(json_match.group()) if json_match else {"error": "Analysis failed"}
+
+        log_event("ai_service", "Priority analysis completed", user_id=user_id, org_id=org_id, action="AI_PRIORITY_SUCCESS")
+        return jsonify(analysis), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500

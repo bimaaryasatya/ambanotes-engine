@@ -2,6 +2,8 @@ import os
 import sys
 import datetime
 import requests
+import json
+import re
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -112,4 +114,54 @@ def weekly_summary(current_user):
 
     except Exception as e:
         log_event("insight_service", f"Weekly summary error: {str(e)}", user_id=user_id, org_id=org_id, action="WEEKLY_SUMMARY_FAILED")
+        return jsonify({"error": str(e)}), 500
+
+
+@insight_bp.route("/predictive-trends", methods=["GET"])
+@token_required
+def predictive_trends(current_user):
+    """
+    Predictive Analytics for Organizational Workload
+    ---
+    tags:
+      - Insight
+    security:
+      - BearerAuth: []
+    responses:
+      200:
+        description: Workload predictions based on historical data
+    """
+    org_id = current_user.get("org_id")
+    
+    # Fetch historical data count
+    docs_count = docs_col.count_documents({"org_id": org_id})
+    
+    prompt = (
+        "Anda adalah Data Scientist AmbaNotes. Analisis beban kerja organisasi ini.\n"
+        f"Data saat ini: Total Dokumen {docs_count}.\n"
+        "Berdasarkan pola administrasi pemerintahan Indonesia, buatkan prediksi beban kerja "
+        "untuk 3 bulan ke depan (Januari-Desember) dalam format JSON:\n"
+        "{\n"
+        "  \"predictions\": [\n"
+        "    {\"month\": \"...\", \"workload_score\": 0.0 to 1.0, \"reason\": \"...\"}\n"
+        "  ],\n"
+        "  \"recommendation\": \"...\"\n"
+        "}"
+    )
+
+    try:
+        response = requests.post(
+            "https://api.mistral.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
+            json={
+                "model": "mistral-small",
+                "messages": [{"role": "user", "content": prompt}]
+            }
+        )
+        response.raise_for_status()
+        content = response.json()['choices'][0]['message']['content']
+        predictions = json.loads(re.search(r"\{.*\}", content, re.DOTALL).group())
+        
+        return jsonify(predictions), 200
+    except Exception as e:
         return jsonify({"error": str(e)}), 500

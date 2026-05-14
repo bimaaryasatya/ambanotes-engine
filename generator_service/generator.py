@@ -9,7 +9,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Blueprint, request, jsonify, render_template_string
 from common.logger import log_event
 from common.jwt_utils import token_required
-from common.db import users_col, delegations_col, assets_col
+from common.db import users_col, delegations_col, assets_col, docs_col
+import hashlib
 
 generator_bp = Blueprint('generator', __name__)
 
@@ -144,12 +145,62 @@ def generate_surat_tugas(current_user):
         current_date=datetime.date.today().strftime("%d %B %Y")
     )
 
+    # 4. Generate Unique Hash for Anti-Fraud
+    doc_hash = hashlib.sha256(f"{user_id}{datetime.datetime.utcnow().timestamp()}".encode()).hexdigest()[:16]
+    
+    # Store reference in docs_col (or a dedicated collection)
+    docs_col.update_one(
+        {"doc_id": doc_number}, # Using doc_number as a unique ref here
+        {"$set": {
+            "doc_id": doc_number,
+            "filename": f"SURAT_TUGAS_{doc_number}.pdf",
+            "content": task_description,
+            "org_id": org_id,
+            "verification_hash": doc_hash,
+            "is_generated": True,
+            "created_at": datetime.datetime.utcnow()
+        }},
+        upsert=True
+    )
+
     log_event("generator_service", f"Surat Tugas generated for {delegation_name}", 
-              user_id=user_id, org_id=org_id, action="GENERATE_SURAT_TUGAS")
+              user_id=user_id, org_id=org_id, action="GENERATE_SURAT_TUGAS", metadata={"hash": doc_hash})
 
     return jsonify({
         "html": html_content,
-        "message": "HTML template generated successfully. Use a PDF library on frontend/backend to convert."
+        "verification_hash": doc_hash,
+        "message": "HTML template generated successfully. Use the hash to verify authenticity."
+    }), 200
+
+
+@generator_bp.route('/verify/<doc_hash>', methods=['GET'])
+def verify_document(doc_hash):
+    """
+    Verify Document Authenticity (Anti-Fraud)
+    ---
+    tags:
+      - Generator
+    parameters:
+      - name: doc_hash
+        in: path
+        type: string
+        required: true
+    responses:
+      200:
+        description: Verification status
+    """
+    doc = docs_col.find_one({"verification_hash": doc_hash})
+    if not doc:
+        return jsonify({"valid": False, "message": "Document hash not found. This might be a forgery."}), 404
+    
+    return jsonify({
+        "valid": True,
+        "message": "Document is AUTHENTIC",
+        "details": {
+            "doc_id": doc['doc_id'],
+            "org_id": doc['org_id'],
+            "created_at": doc['created_at'].isoformat() if 'created_at' in doc else None
+        }
     }), 200
 
 
