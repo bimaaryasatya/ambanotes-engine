@@ -18,6 +18,35 @@ ai_bp = Blueprint('ai', __name__)
 @ai_bp.route("/summarize", methods=["POST"])
 @token_required
 def summarize(current_user):
+    """
+    Summarize Document Text
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+          properties:
+            text:
+              type: string
+              example: "Isi dokumen surat yang panjang..."
+    responses:
+      200:
+        description: Summary generated successfully
+      400:
+        description: No text provided
+      401:
+        description: Unauthorized
+      500:
+        description: AI processing error
+    """
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
@@ -58,6 +87,36 @@ def summarize(current_user):
 @ai_bp.route("/chat", methods=["POST"])
 @token_required
 def chat(current_user):
+    """
+    Contextual Chatbot (Single Document)
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - message
+          properties:
+            message:
+              type: string
+              example: "Apa isi dari surat ini?"
+            context:
+              type: string
+              example: "Isi teks surat sebagai konteks..."
+    responses:
+      200:
+        description: Chat response generated
+      401:
+        description: Unauthorized
+      500:
+        description: AI processing error
+    """
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
@@ -100,6 +159,35 @@ def chat(current_user):
 @ai_bp.route("/chat-global", methods=["POST"])
 @token_required
 def chat_global(current_user):
+    """
+    Organization-wide Chatbot with Citations
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - message
+          properties:
+            message:
+              type: string
+              example: "Rangkum semua surat undangan yang ada."
+    responses:
+      200:
+        description: Chat response with document references
+      400:
+        description: Message is required
+      401:
+        description: Unauthorized
+      500:
+        description: AI processing error
+    """
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
@@ -201,6 +289,35 @@ def chat_global(current_user):
 @ai_bp.route("/extract-tasks", methods=["POST"])
 @token_required
 def extract_tasks(current_user):
+    """
+    Extract Tasks & Agenda from Letter
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+          properties:
+            text:
+              type: string
+              example: "Rapat akan diadakan pada tanggal 20 Mei 2026 pukul 10:00 di Aula Utama."
+    responses:
+      200:
+        description: Array of extracted tasks (JSON)
+      400:
+        description: No text provided
+      401:
+        description: Unauthorized
+      500:
+        description: AI processing error
+    """
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
@@ -249,6 +366,35 @@ def extract_tasks(current_user):
 @ai_bp.route("/generate-reply", methods=["POST"])
 @token_required
 def generate_reply(current_user):
+    """
+    Generate 3 Formal Reply Drafts (Accept, Decline, Neutral)
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+          properties:
+            text:
+              type: string
+              example: "Dengan hormat, kami mengundang Bapak/Ibu untuk menghadiri rapat..."
+    responses:
+      200:
+        description: JSON with accept, decline, neutral drafts
+      400:
+        description: No text provided
+      401:
+        description: Unauthorized
+      500:
+        description: AI processing error
+    """
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
@@ -299,6 +445,35 @@ def generate_reply(current_user):
 @ai_bp.route("/translate", methods=["POST"])
 @token_required
 def translate_text(current_user):
+    """
+    Translate Text to Formal Indonesian
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+          properties:
+            text:
+              type: string
+              example: "We would like to invite you to the coordination meeting."
+    responses:
+      200:
+        description: Translated text in formal Indonesian
+      400:
+        description: No text provided
+      401:
+        description: Unauthorized
+      500:
+        description: AI processing error
+    """
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
@@ -337,6 +512,41 @@ def translate_text(current_user):
 @ai_bp.route("/suggest-disposition", methods=["POST"])
 @token_required
 def suggest_disposition(current_user):
+    """
+    Suggest Department for Incoming Letter (Smart Disposition)
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+            - delegations
+          properties:
+            text:
+              type: string
+              example: "Permohonan perbaikan jalan raya di Kecamatan Sumpiuh."
+            delegations:
+              type: array
+              items:
+                type: string
+              example: ["Dinas Pekerjaan Umum", "Dinas Sosial", "Dinas Kesehatan"]
+    responses:
+      200:
+        description: JSON with suggested_delegation and reason
+      400:
+        description: Text and delegations list are required
+      401:
+        description: Unauthorized
+      500:
+        description: AI processing error
+    """
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
@@ -383,6 +593,35 @@ def suggest_disposition(current_user):
 @ai_bp.route("/redact-sensitive", methods=["POST"])
 @token_required
 def redact_sensitive(current_user):
+    """
+    Redact Sensitive Personal Data (NIK, Phone, Address)
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+          properties:
+            text:
+              type: string
+              example: "Nama: Budi, NIK: 3302041234567890, HP: 081234567890, Alamat: Jl. Merdeka No.1"
+    responses:
+      200:
+        description: Text with sensitive data replaced by [SENSORS]
+      400:
+        description: No text provided
+      401:
+        description: Unauthorized
+      500:
+        description: AI processing error
+    """
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
@@ -422,7 +661,33 @@ def redact_sensitive(current_user):
 @token_required
 def semantic_search(current_user):
     """
-    Search documents by meaning/intent
+    Semantic Search (Find Documents by Meaning)
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - query
+          properties:
+            query:
+              type: string
+              example: "surat tentang anggaran belanja kantor"
+    responses:
+      200:
+        description: Array of relevant documents (doc_id, filename)
+      400:
+        description: Query is required
+      401:
+        description: Unauthorized
+      500:
+        description: AI processing error
     """
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
@@ -487,7 +752,33 @@ def semantic_search(current_user):
 @token_required
 def voice_intent(current_user):
     """
-    Process transcribed text to detect administrative actions
+    Voice Intent Extraction (Speech to Action)
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+          properties:
+            text:
+              type: string
+              example: "Buatkan pengingat rapat besok jam 10 pagi di aula"
+    responses:
+      200:
+        description: JSON with intent and extracted params
+      400:
+        description: No text provided
+      401:
+        description: Unauthorized
+      500:
+        description: AI processing error
     """
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")

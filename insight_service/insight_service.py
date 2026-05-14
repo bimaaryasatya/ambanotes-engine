@@ -23,6 +23,21 @@ def home():
 @insight_bp.route("/api/insights", methods=["GET"])
 @token_required
 def insights(current_user):
+    """
+    Get Organization Insights & Analytics
+    ---
+    tags:
+      - Insight
+    security:
+      - BearerAuth: []
+    responses:
+      200:
+        description: Detailed insights from document data
+      401:
+        description: Unauthorized
+      500:
+        description: Internal Server Error
+    """
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
