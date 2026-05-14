@@ -508,7 +508,7 @@ curl -X POST http://localhost:5009/generator/surat-tugas \
 
 ## 👥 Tim Pengembang
 
-Proyek ini dikembangkan oleh **Bima Arya Satya** dkk sebagai bagian dari **Capstone Project Semester 6** — Universitas Amikom Purwokerto.
+Proyek ini dikembangkan oleh **Bima Arya Satya** dan **Geraldi Novalino Putra** sebagai bagian dari **Capstone Project Semester 6** — Universitas Harkat Negeri.
 
 ---
 
