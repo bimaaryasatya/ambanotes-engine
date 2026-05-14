@@ -18,6 +18,7 @@ from auth_service.auth_service import auth_bp
 from document_service.document_service import document_bp
 from notification_service.notif import notification_bp
 from ai_service.ai_service import ai_bp
+from generator_service.generator import generator_bp
 
 app = Flask(__name__)
 
@@ -60,6 +61,7 @@ app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(document_bp, url_prefix='/document')
 app.register_blueprint(notification_bp, url_prefix='/notification')
 app.register_blueprint(ai_bp, url_prefix='/ai')
+app.register_blueprint(generator_bp, url_prefix='/generator')
 
 @app.route('/', methods=['GET'])
 def index():
