@@ -278,7 +278,8 @@ Server akan berjalan di:
 | Method | Endpoint | Deskripsi |
 |:-------|:---------|:----------|
 | `POST` | `/ai/summarize` | Ringkasan dokumen otomatis |
-| `POST` | `/ai/chat` | Chatbot kontekstual |
+| `POST` | `/ai/chat` | Chatbot kontekstual (Satu dokumen) |
+| `POST` | `/ai/chat-global` | Chatbot Organisasi (Semua dokumen) |
 
 ### 📊 Insight Service (`/insight`)
 

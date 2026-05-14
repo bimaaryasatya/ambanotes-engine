@@ -8,6 +8,7 @@ import requests
 from common.config import Config
 from common.logger import log_event
 from common.jwt_utils import token_required
+from common.db import docs_col
 
 ai_bp = Blueprint('ai', __name__)
 
@@ -83,7 +84,7 @@ def summarize(current_user):
 @token_required
 def chat(current_user):
     """
-    Chatbot endpoint using Mistral AI
+    Chatbot endpoint using Mistral AI (Specific Context)
     ---
     tags:
       - AI
@@ -144,4 +145,97 @@ def chat(current_user):
     except Exception as e:
         log_event("ai_service", f"Chat error: {str(e)}",
                   user_id=user_id, org_id=org_id, action="AI_CHAT_FAILED", metadata={"error": str(e)})
+        return jsonify({"error": str(e)}), 500
+
+
+@ai_bp.route("/chat-global", methods=["POST"])
+@token_required
+def chat_global(current_user):
+    """
+    Organization-wide Chatbot (Reads all documents)
+    ---
+    tags:
+      - AI
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Rangkum semua surat undangan yang ada."
+    responses:
+      200:
+        description: Chat response generated based on all documents
+      401:
+        description: Unauthorized
+    """
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+
+    log_event("ai_service", f"Global Chat request from: {current_user.get('username')}",
+              user_id=user_id, org_id=org_id, action="AI_CHAT_GLOBAL_START")
+    
+    try:
+        data = request.json or {}
+        user_message = data.get("message", "")
+
+        if not user_message:
+            return jsonify({"error": "Message is required"}), 400
+
+        # Fetch all documents for this organization
+        docs = list(docs_col.find({"org_id": org_id}))
+        
+        if not docs:
+            return jsonify({"answer": "Organisasi Anda belum memiliki dokumen untuk dianalisis."}), 200
+
+        # Build global context
+        global_context = "Berikut adalah daftar dokumen yang tersedia di organisasi Anda:\n\n"
+        for i, doc in enumerate(docs):
+            filename = doc.get('filename', 'Tanpa Nama')
+            content = doc.get('content', '')
+            global_context += f"Dokumen {i+1} ({filename}):\n{content}\n---\n"
+
+        # Limit context size to avoid token issues (simple truncation for now)
+        if len(global_context) > 15000:
+            global_context = global_context[:15000] + "... [Konteks dipotong karena terlalu panjang]"
+
+        messages = [
+            {
+                "role": "system", 
+                "content": (
+                    "Anda adalah asisten cerdas AmbaNotes. Tugas Anda adalah membantu pengguna mengelola "
+                    "dan menganalisis seluruh dokumen di organisasi mereka. "
+                    "Berikut adalah konteks dari seluruh dokumen yang ada:\n\n"
+                    f"{global_context}"
+                )
+            },
+            {"role": "user", "content": user_message}
+        ]
+
+        response = requests.post(
+            "https://api.mistral.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
+            json={
+                "model": "mistral-small",
+                "messages": messages
+            }
+        )
+
+        response.raise_for_status()
+        result = response.json()
+        answer = result['choices'][0]['message']['content']
+
+        log_event("ai_service", "Global Chat response generated",
+                  user_id=user_id, org_id=org_id, action="AI_CHAT_GLOBAL_SUCCESS")
+        
+        return jsonify({"answer": answer}), 200
+
+    except Exception as e:
+        log_event("ai_service", f"Global Chat error: {str(e)}",
+                  user_id=user_id, org_id=org_id, action="AI_CHAT_GLOBAL_FAILED", metadata={"error": str(e)})
         return jsonify({"error": str(e)}), 500
