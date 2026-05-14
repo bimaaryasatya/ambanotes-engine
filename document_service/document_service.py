@@ -4,9 +4,6 @@ import sys
 # Add parent directory to path so we can import from common
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Blueprint, jsonify
-from common.logger import log_event
-
 from flask import Blueprint, jsonify, request
 import requests
 from common.db import docs_col
@@ -94,37 +91,160 @@ def upload_document():
 
 @document_bp.route('/<doc_id>', methods=['DELETE'])
 def delete_document(doc_id):
-    """Delete document by ID"""
+    """
+    Delete Document by ID
+    ---
+    tags:
+      - Document
+    parameters:
+      - name: doc_id
+        in: path
+        type: string
+        required: true
+        description: The unique document ID (hex string) to delete
+    responses:
+      200:
+        description: Document deleted successfully
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: Document deleted
+      404:
+        description: Document not found
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              example: Document not found
+    """
+    log_event("document_service", f"Delete request for doc_id: {doc_id}")
     result = docs_col.delete_one({"doc_id": doc_id})
     if result.deleted_count:
+        log_event("document_service", f"Document deleted: {doc_id}")
         return jsonify({"message": "Document deleted"}), 200
+    log_event("document_service", f"Document not found for delete: {doc_id}")
     return jsonify({"error": "Document not found"}), 404
 
 @document_bp.route('/replace/<doc_id>', methods=['PUT'])
 def replace_document(doc_id):
-    """Replace and re-process document"""
-    data = request.json
-    new_text = data.get("text", "")
-    
-    if not new_text:
-        return jsonify({"error": "New text is required"}), 400
+    """
+    Replace and Re-process Document
+    ---
+    tags:
+      - Document
+    description: >
+      Replace an existing document by providing either a new image file
+      (which will be re-processed through OCR) or raw text.
+      The document will be re-classified and re-analyzed for entities.
+      If a file is provided, it takes priority over the text field.
+    consumes:
+      - multipart/form-data
+    parameters:
+      - name: doc_id
+        in: path
+        type: string
+        required: true
+        description: The unique document ID (hex string) to replace
+      - name: file
+        in: formData
+        type: file
+        required: false
+        description: (Optional) New image file to re-process through OCR
+      - name: text
+        in: formData
+        type: string
+        required: false
+        description: (Optional) New raw text content to replace the document with
+    responses:
+      200:
+        description: Document updated and re-processed successfully
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: Document updated and re-processed
+            doc_id:
+              type: string
+            classification:
+              type: object
+            entities:
+              type: object
+      400:
+        description: No file or text provided
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              example: Either a file or text must be provided
+      404:
+        description: Document not found
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              example: Document not found
+    """
+    log_event("document_service", f"Replace request for doc_id: {doc_id}")
 
-    # 1. Re-run AI Pipeline
+    # Check if document exists first
+    existing = docs_col.find_one({"doc_id": doc_id})
+    if not existing:
+        log_event("document_service", f"Document not found for replace: {doc_id}")
+        return jsonify({"error": "Document not found"}), 404
+
+    new_text = ""
+    new_filename = existing.get("filename", "")
+
+    # Priority 1: File upload -> re-OCR
+    if 'file' in request.files and request.files['file'].filename:
+        file = request.files['file']
+        new_filename = file.filename
+        try:
+            files = {'file': (file.filename, file.stream, file.mimetype)}
+            ocr_res = requests.post(f"{GATEWAY_URL}/ocr/extract-text", files=files)
+            ocr_res.raise_for_status()
+            new_text = ocr_res.json().get("text", "")
+        except Exception as e:
+            log_event("document_service", f"OCR request failed during replace: {str(e)}")
+            return jsonify({"error": f"OCR failed: {str(e)}"}), 500
+    # Priority 2: Text from form or JSON body
+    elif request.form.get("text"):
+        new_text = request.form.get("text")
+    elif request.json and request.json.get("text"):
+        new_text = request.json.get("text")
+
+    if not new_text:
+        return jsonify({"error": "Either a file or text must be provided"}), 400
+
+    # Re-run AI Pipeline
     classification, entities = process_ai_pipeline(new_text)
 
-    # 2. Update Database
+    # Update Database
     update_data = {
+        "filename": new_filename,
         "content": new_text,
         "classification": classification,
         "entities": entities,
-        "updated_at": datetime.datetime.utcnow()
+        "updated_at": datetime.datetime.utcnow(),
+        "status": "re-processed"
     }
-    
-    result = docs_col.update_one({"doc_id": doc_id}, {"$set": update_data})
-    
-    if result.matched_count:
-        return jsonify({"message": "Document updated and re-processed"}), 200
-    return jsonify({"error": "Document not found"}), 404
+
+    docs_col.update_one({"doc_id": doc_id}, {"$set": update_data})
+    log_event("document_service", f"Document replaced and re-processed: {doc_id}")
+
+    return jsonify({
+        "message": "Document updated and re-processed",
+        "doc_id": doc_id,
+        "filename": new_filename,
+        "classification": classification,
+        "entities": entities
+    }), 200
 
 @document_bp.route('/list', methods=['GET'])
 def list_documents():
