@@ -5,6 +5,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 
 from flask import Flask, jsonify
+from flask_cors import CORS
 from flasgger import Swagger
 from common.logger import log_event
 
@@ -21,6 +22,7 @@ from ai_service.ai_service import ai_bp
 from generator_service.generator import generator_bp
 
 app = Flask(__name__)
+CORS(app)
 
 # Configure Swagger
 swagger_config = {
@@ -35,7 +37,9 @@ swagger_config = {
     ],
     "static_url_path": "/flasgger_static",
     "swagger_ui": True,
-    "specs_route": "/apidocs/"
+    "specs_route": "/apidocs/",
+    "uiversion": 3,
+    "openapi": "3.0.1",
 }
 
 swagger_template = {
