@@ -245,7 +245,10 @@ def get_profile(current_user):
         description: Unauthorized
     """
     user_id = current_user.get('user_id')
-    user = users_col.find_one({"_id": ObjectId(user_id)})
+    try:
+        user = users_col.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        return jsonify({"error": "Invalid user ID in token"}), 400
     
     if not user:
         return jsonify({"error": "User not found"}), 404
@@ -260,9 +263,13 @@ def get_profile(current_user):
     }
     
     if user.get('delegation_id'):
-        delegation = delegations_col.find_one({"_id": ObjectId(user['delegation_id'])})
-        if delegation:
-            user_data['delegation_name'] = delegation.get('name')
+        try:
+            delegation = delegations_col.find_one({"_id": ObjectId(user['delegation_id'])})
+            if delegation:
+                user_data['delegation_name'] = delegation.get('name')
+        except Exception:
+            # If delegation_id is invalid (like the word 'string'), just ignore it
+            user_data['delegation_name'] = "Invalid Delegation ID"
 
     return jsonify(user_data), 200
 
@@ -399,8 +406,11 @@ def change_delegation(current_user):
     if not target_user_id or not new_del_id:
         return jsonify({"error": "Missing IDs"}), 400
 
-    target_user = users_col.find_one({"_id": ObjectId(target_user_id), "org_id": org_id})
-    new_delegation = delegations_col.find_one({"_id": ObjectId(new_del_id), "org_id": org_id})
+    try:
+        target_user = users_col.find_one({"_id": ObjectId(target_user_id), "org_id": org_id})
+        new_delegation = delegations_col.find_one({"_id": ObjectId(new_del_id), "org_id": org_id})
+    except Exception:
+        return jsonify({"error": "Invalid user ID or delegation ID format"}), 400
 
     if not target_user or not new_delegation:
         return jsonify({"error": "Invalid target user or delegation"}), 404

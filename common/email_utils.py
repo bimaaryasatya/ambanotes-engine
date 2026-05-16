@@ -31,7 +31,7 @@ def send_email(subject, recipient_email, body_html):
         log_event("email_utils", f"Email sent successfully to {recipient_email}")
         return True, "Email sent successfully"
     except Exception as e:
-        log_event("email_utils", f"Failed to send email to {recipient_email}: {str(e)}", level="error")
+        log_event("email_utils", f"Failed to send email to {recipient_email}: {str(e)}", action="EMAIL_FAILED")
         return False, str(e)
 
 def send_otp_email(recipient_email, otp_code):

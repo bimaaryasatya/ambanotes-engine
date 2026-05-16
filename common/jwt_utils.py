@@ -37,10 +37,15 @@ def token_required(f):
         auth_header = request.headers.get("Authorization", "")
         # Debug: log the auth header received
         print(f"[AUTH DEBUG] Authorization header: '{auth_header[:50]}...' (len={len(auth_header)})")
-        if not auth_header.startswith("Bearer "):
-            return jsonify({"error": "Authorization header missing or invalid"}), 401
+        
+        if not auth_header:
+            return jsonify({"error": "Authorization header missing"}), 401
 
-        token = auth_header.split(" ", 1)[1]
+        # Handle both "Bearer <token>" and raw "<token>"
+        if auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1]
+        else:
+            token = auth_header
         try:
             payload = verify_token(token)
         except jwt.ExpiredSignatureError:
