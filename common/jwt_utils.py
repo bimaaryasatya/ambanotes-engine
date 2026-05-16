@@ -35,6 +35,8 @@ def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
+        # Debug: log the auth header received
+        print(f"[AUTH DEBUG] Authorization header: '{auth_header[:50]}...' (len={len(auth_header)})")
         if not auth_header.startswith("Bearer "):
             return jsonify({"error": "Authorization header missing or invalid"}), 401
 

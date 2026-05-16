@@ -29,6 +29,12 @@ def extract_text(current_user):
     consumes:
       - multipart/form-data
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: file
         in: formData
         type: file

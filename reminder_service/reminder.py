@@ -28,6 +28,12 @@ def create_reminder(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -59,7 +65,7 @@ def create_reminder(current_user):
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
     
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     task = data.get('task')
     date = data.get('date')
     
@@ -103,6 +109,13 @@ def list_reminders(current_user):
       - application/json
     security:
       - BearerAuth: []
+    parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
     responses:
       200:
         description: List of reminders
@@ -133,6 +146,12 @@ def delete_reminder(current_user, reminder_id):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: reminder_id
         in: path
         required: true

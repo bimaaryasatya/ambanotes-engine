@@ -39,16 +39,21 @@ swagger_config = {
     "swagger_ui": True,
     "specs_route": "/apidocs/",
     "uiversion": 3,
-    "openapi": "3.0.1",
 }
 
 swagger_template = {
+    "swagger": "2.0",
+    "info": {
+        "title": "AmbaNotes API",
+        "description": "Backend cerdas berbasis AI untuk manajemen dokumen surat",
+        "version": "1.0.0"
+    },
     "securityDefinitions": {
         "BearerAuth": {
             "type": "apiKey",
             "name": "Authorization",
             "in": "header",
-            "description": "Masukkan token JWT dengan format: **Bearer &lt;token&gt;**"
+            "description": "Ketik: **Bearer &lt;spasi&gt; token_anda**. Contoh: `Bearer eyJhbGci...`"
         }
     }
 }

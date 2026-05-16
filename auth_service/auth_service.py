@@ -86,7 +86,7 @@ def register():
       201:
         description: User registered successfully
     """
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     username = data.get('username', '').strip()
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
@@ -188,13 +188,17 @@ def login():
       401:
         description: Invalid credentials
     """
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
+
+    if not email or not password:
+        return jsonify({"error": "Email and password are required"}), 400
 
     user = users_col.find_one({"email": email})
 
     if not user or not check_password_hash(user['password'], password):
+        log_event("auth_service", f"Failed login attempt for email: {email}", action="LOGIN_FAILED")
         return jsonify({"error": "Invalid email or password"}), 401
 
     token = generate_token(user)
@@ -221,11 +225,24 @@ def get_profile(current_user):
     ---
     tags:
       - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
+    parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
     responses:
       200:
         description: User profile data
+      401:
+        description: Unauthorized
     """
     user_id = current_user.get('user_id')
     user = users_col.find_one({"_id": ObjectId(user_id)})
@@ -266,6 +283,12 @@ def create_delegation(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -281,7 +304,7 @@ def create_delegation(current_user):
       201:
         description: Delegation created
     """
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     name = data.get('name', '').strip()
     org_id = current_user.get('org_id')
 
@@ -310,6 +333,13 @@ def list_delegations(current_user):
       - application/json
     security:
       - BearerAuth: []
+    parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
     responses:
       200:
         description: List of delegations
@@ -338,6 +368,12 @@ def change_delegation(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -356,7 +392,7 @@ def change_delegation(current_user):
         description: Transfer successful
     """
     org_id = current_user.get('org_id')
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     target_user_id = data.get('target_user_id')
     new_del_id = data.get('new_delegation_id')
 
@@ -391,6 +427,12 @@ def upload_asset(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -413,7 +455,7 @@ def upload_asset(current_user):
       201:
         description: Asset uploaded
     """
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     asset_type = data.get('type')
     delegation_id = data.get('delegation_id')
     image_data = data.get('image_data') 
@@ -439,6 +481,12 @@ def invite_member(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -455,7 +503,7 @@ def invite_member(current_user):
       201:
         description: Invitation sent
     """
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     email = data.get('email', '').strip().lower()
     role = data.get('role', 'member')
     org_id = current_user.get('org_id')
@@ -482,6 +530,12 @@ def change_password(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -501,7 +555,7 @@ def change_password(current_user):
       401:
         description: Invalid old password
     """
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     old_password = data.get('old_password', '')
     new_password = data.get('new_password', '')
 
@@ -556,7 +610,7 @@ def forgot_password():
       404:
         description: User not found
     """
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     email = data.get('email', '').strip().lower()
 
     if not email:
@@ -622,7 +676,7 @@ def reset_password():
       400:
         description: Invalid OTP or expired
     """
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     email = data.get('email', '').strip().lower()
     otp_input = data.get('otp', '').strip()
     new_password = data.get('new_password', '')

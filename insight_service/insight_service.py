@@ -32,6 +32,13 @@ def insights(current_user):
       - Insight
     security:
       - BearerAuth: []
+    parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
     responses:
       200:
         description: Detailed insights from document data
@@ -64,6 +71,13 @@ def weekly_summary(current_user):
       - Insight
     security:
       - BearerAuth: []
+    parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
     responses:
       200:
         description: AI-generated weekly summary
@@ -127,6 +141,13 @@ def predictive_trends(current_user):
       - Insight
     security:
       - BearerAuth: []
+    parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
     responses:
       200:
         description: Workload predictions based on historical data

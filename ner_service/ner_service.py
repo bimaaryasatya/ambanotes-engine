@@ -39,6 +39,12 @@ def extract_entities(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -59,7 +65,7 @@ def extract_entities(current_user):
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     text = data.get('text', '')
 
     if not text:

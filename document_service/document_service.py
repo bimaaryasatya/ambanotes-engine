@@ -131,6 +131,13 @@ def list_documents(current_user):
       - application/json
     security:
       - BearerAuth: []
+    parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
     responses:
       200:
         description: List of documents belonging to the user's organization
@@ -164,6 +171,12 @@ def delete_document(current_user, doc_id):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: doc_id
         in: path
         type: string
@@ -271,8 +284,8 @@ def replace_document(current_user, doc_id):
             return jsonify({"error": f"OCR failed: {str(e)}"}), 500
     elif request.form.get("text"):
         new_text = request.form.get("text")
-    elif request.get_json(force=True) and request.get_json(force=True).get("text"):
-        new_text = request.get_json(force=True).get("text")
+    elif request.get_json(force=True, silent=True) and request.get_json(force=True, silent=True).get("text"):
+        new_text = request.get_json(force=True, silent=True).get("text")
 
     if not new_text:
         return jsonify({"error": "Either a file or text must be provided"}), 400

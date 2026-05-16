@@ -30,6 +30,12 @@ def summarize(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -57,7 +63,7 @@ def summarize(current_user):
     log_event("ai_service", f"Summarize request from: {current_user.get('username')}",
               user_id=user_id, org_id=org_id, action="AI_SUMMARIZE_START")
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         text = data.get("text", "")
 
         if not text:
@@ -103,6 +109,12 @@ def chat(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -131,7 +143,7 @@ def chat(current_user):
     log_event("ai_service", f"Chat request from: {current_user.get('username')}",
               user_id=user_id, org_id=org_id, action="AI_CHAT_START")
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         user_message = data.get("message", "")
         context = data.get("context", "")
 
@@ -179,6 +191,12 @@ def chat_global(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -207,7 +225,7 @@ def chat_global(current_user):
               user_id=user_id, org_id=org_id, action="AI_CHAT_GLOBAL_START")
     
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         user_message = data.get("message", "")
 
         if not user_message:
@@ -313,6 +331,12 @@ def extract_tasks(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -338,7 +362,7 @@ def extract_tasks(current_user):
     org_id = current_user.get("org_id")
 
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         text = data.get("text", "")
         if not text:
             return jsonify({"error": "No text provided"}), 400
@@ -394,6 +418,12 @@ def generate_reply(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -419,7 +449,7 @@ def generate_reply(current_user):
     org_id = current_user.get("org_id")
 
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         text = data.get("text", "")
         if not text:
             return jsonify({"error": "No text provided"}), 400
@@ -477,6 +507,12 @@ def translate_text(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -502,7 +538,7 @@ def translate_text(current_user):
     org_id = current_user.get("org_id")
 
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         text = data.get("text", "")
         if not text:
             return jsonify({"error": "No text provided"}), 400
@@ -548,6 +584,12 @@ def suggest_disposition(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -579,7 +621,7 @@ def suggest_disposition(current_user):
     org_id = current_user.get("org_id")
 
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         text = data.get("text", "")
         delegations = data.get("delegations", []) 
 
@@ -633,6 +675,12 @@ def redact_sensitive(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -658,7 +706,7 @@ def redact_sensitive(current_user):
     org_id = current_user.get("org_id")
 
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         text = data.get("text", "")
         if not text:
             return jsonify({"error": "No text provided"}), 400
@@ -704,6 +752,12 @@ def semantic_search(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -729,7 +783,7 @@ def semantic_search(current_user):
     org_id = current_user.get("org_id")
 
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         query = data.get("query", "")
         if not query:
             return jsonify({"error": "Query is required"}), 400
@@ -799,6 +853,12 @@ def voice_intent(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -824,7 +884,7 @@ def voice_intent(current_user):
     org_id = current_user.get("org_id")
 
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         text = data.get("text", "")
         if not text:
             return jsonify({"error": "No text provided"}), 400
@@ -876,6 +936,12 @@ def analyze_workflow(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -895,7 +961,7 @@ def analyze_workflow(current_user):
     org_id = current_user.get("org_id")
 
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         text = data.get("text", "")
         
         # 1. Fetch existing reminders/tasks for context
@@ -954,6 +1020,12 @@ def extract_budget(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -973,7 +1045,7 @@ def extract_budget(current_user):
     org_id = current_user.get("org_id")
 
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         text = data.get("text", "")
 
         prompt = (
@@ -1019,6 +1091,12 @@ def analyze_priority(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: body
         in: body
         required: true
@@ -1038,7 +1116,7 @@ def analyze_priority(current_user):
     org_id = current_user.get("org_id")
 
     try:
-        data = request.get_json(force=True) or {}
+        data = request.get_json(force=True, silent=True) or {}
         text = data.get("text", "")
 
         prompt = (
