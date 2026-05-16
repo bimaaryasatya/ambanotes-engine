@@ -7,8 +7,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash, check_password_hash
-from common.db import users_col, orgs_col, invitations_col, delegations_col, assets_col, docs_col
+from common.db import users_col, orgs_col, invitations_col, delegations_col, assets_col, docs_col, otps_col
 from common.jwt_utils import generate_token, token_required, role_required
+from common.email_utils import send_otp_email
 from common.logger import log_event
 from bson.objectid import ObjectId
 import uuid
@@ -441,6 +442,186 @@ def invite_member(current_user):
     
     invitations_col.insert_one({"email": email, "org_id": org_id, "role": role, "status": "pending", "created_at": datetime.datetime.utcnow()})
     return jsonify({"message": "Invitation sent successfully"}), 201
+
+
+@auth_bp.route('/change-password', methods=['POST'])
+@token_required
+def change_password(current_user):
+    """
+    Change Password (Authenticated)
+    ---
+    tags:
+      - Auth
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - old_password
+            - new_password
+          properties:
+            old_password:
+              type: string
+            new_password:
+              type: string
+    responses:
+      200:
+        description: Password updated successfully
+      401:
+        description: Invalid old password
+    """
+    data = request.json or {}
+    old_password = data.get('old_password', '')
+    new_password = data.get('new_password', '')
+
+    if not old_password or not new_password:
+        return jsonify({"error": "Missing old or new password"}), 400
+
+    user_id = current_user.get('user_id')
+    user = users_col.find_one({"_id": ObjectId(user_id)})
+
+    if not user or not check_password_hash(user['password'], old_password):
+        return jsonify({"error": "Invalid old password"}), 401
+
+    p_error = _validate_password(new_password)
+    if p_error:
+        return jsonify({"error": p_error}), 400
+
+    hashed_password = generate_password_hash(new_password)
+    users_col.update_one({"_id": ObjectId(user_id)}, {"$set": {"password": hashed_password}})
+
+    log_event("auth_service", f"Password changed for user: {user['username']}", user_id=user_id)
+
+    return jsonify({"message": "Password updated successfully"}), 200
+
+
+
+@auth_bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    """
+    Request Password Reset OTP
+    ---
+    tags:
+      - Auth
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+          properties:
+            email:
+              type: string
+              example: "user@example.com"
+    responses:
+      200:
+        description: OTP sent to email
+      404:
+        description: User not found
+    """
+    data = request.json or {}
+    email = data.get('email', '').strip().lower()
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    user = users_col.find_one({"email": email})
+    if not user:
+        return jsonify({"error": "User with this email does not exist"}), 404
+
+    # Generate 6-digit OTP
+    otp_code = "".join([str(secrets.randbelow(10)) for _ in range(6)])
+    expiry = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+
+    # Store/Update OTP in database
+    otps_col.update_one(
+        {"email": email},
+        {"$set": {"otp": otp_code, "expiry": expiry, "created_at": datetime.datetime.utcnow()}},
+        upsert=True
+    )
+
+    # Send email
+    success, message = send_otp_email(email, otp_code)
+    
+    if not success:
+        return jsonify({"error": f"Failed to send email: {message}"}), 500
+
+    log_event("auth_service", f"OTP sent to {email}", user_id=str(user['_id']))
+
+    return jsonify({"message": "OTP has been sent to your email"}), 200
+
+
+@auth_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    """
+    Reset Password using OTP
+    ---
+    tags:
+      - Auth
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - otp
+            - new_password
+          properties:
+            email:
+              type: string
+            otp:
+              type: string
+            new_password:
+              type: string
+    responses:
+      200:
+        description: Password reset successful
+      400:
+        description: Invalid OTP or expired
+    """
+    data = request.json or {}
+    email = data.get('email', '').strip().lower()
+    otp_input = data.get('otp', '').strip()
+    new_password = data.get('new_password', '')
+
+    if not email or not otp_input or not new_password:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    # Validate new password
+    p_error = _validate_password(new_password)
+    if p_error:
+        return jsonify({"error": p_error}), 400
+
+    # Check OTP
+    otp_record = otps_col.find_one({"email": email})
+    
+    if not otp_record:
+        return jsonify({"error": "No OTP found for this email"}), 400
+    
+    if otp_record['otp'] != otp_input:
+        return jsonify({"error": "Invalid OTP code"}), 400
+    
+    if datetime.datetime.utcnow() > otp_record['expiry']:
+        return jsonify({"error": "OTP has expired"}), 400
+
+    # Update Password
+    hashed_password = generate_password_hash(new_password)
+    users_col.update_one({"email": email}, {"$set": {"password": hashed_password}})
+
+    # Delete used OTP
+    otps_col.delete_one({"email": email})
+
+    log_event("auth_service", f"Password reset successful for {email}")
+
+    return jsonify({"message": "Password has been reset successfully"}), 200
 
 
 @auth_bp.route('/health', methods=['GET'])

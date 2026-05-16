@@ -224,6 +224,14 @@ FLASK_APP="api_gateway/api.py"
 FLASK_ENV="development"
 FLASK_DEBUG="1"
 PORT="5009"
+
+# ─── Email (SMTP) ──────────────────────────────────
+MAIL_SERVER="smtp.gmail.com"
+MAIL_PORT=587
+MAIL_USE_TLS="True"
+MAIL_USERNAME="your-email@gmail.com"
+MAIL_PASSWORD="your-app-password"
+MAIL_DEFAULT_SENDER="AmbaNotes <your-email@gmail.com>"
 ```
 
 ### 5️⃣ Siapkan Model ML (Opsional)
@@ -274,6 +282,9 @@ Server akan berjalan di:
 | `POST` | `/auth/register` | Registrasi user baru (create/join org) | ❌ | — |
 | `POST` | `/auth/login` | Login & dapatkan JWT token | ❌ | — |
 | `GET` | `/auth/profile` | Lihat profil user yang sedang login | ✅ | Any |
+| `POST` | `/auth/change-password` | Ganti password (saat login) | ✅ | Any |
+| `POST` | `/auth/forgot-password` | Request OTP reset password via email | ❌ | — |
+| `POST` | `/auth/reset-password` | Reset password menggunakan kode OTP | ❌ | — |
 | `POST` | `/auth/invite` | Undang member baru via email | ✅ | Owner |
 | `GET` | `/auth/health` | Health check auth service | ❌ | — |
 
@@ -481,6 +492,7 @@ curl -X POST http://localhost:5009/generator/surat-tugas \
 | `invitations` | Undangan member | `email`, `org_id`, `status` (`pending`/`accepted`), `role` |
 | `logs` | Audit trail | `service`, `message`, `user_id`, `org_id`, `action`, `timestamp` |
 | `notifications` | Notifikasi user | `user_id`, `title`, `message`, `is_read`, `created_at` |
+| `otps` | Kode Verifikasi | `email`, `otp`, `expiry`, `created_at` |
 
 
 ---

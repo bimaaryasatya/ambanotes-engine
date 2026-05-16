@@ -16,3 +16,4 @@ reminders_col = db["reminders"]
 delegations_col = db["delegations"]
 assets_col = db["assets"] # To store Letterheads and Signatures
 notifications_col = db["notifications"]
+otps_col = db["otps"]
