@@ -108,9 +108,9 @@ Aplikasi ini menggunakan pola **API Gateway** dengan **Flask Blueprints**, di ma
 | **Authentication** | PyJWT, Werkzeug Security |
 | **AI / ML** | HuggingFace Transformers, PyTorch, SafeTensors |
 | **NLP** | IndoBERT (`cahya/bert-base-indonesian-NER`), NLTK |
-| **OCR** | Google Gemini API (Multimodal Vision) |
+| **OCR** | Google Gemini API (1.5 Flash - Multimodal Vision) |
 | **LLM** | Mistral AI API (`mistral-small`) |
-| **API Docs** | Flasgger (Swagger UI) |
+| **API Docs** | Flasgger (Swagger 2.0) |
 | **Data Processing** | Pandas, NumPy |
 | **Template Engine** | Jinja2 (untuk generator surat) |
 | **Environment** | python-dotenv |
@@ -232,7 +232,7 @@ MAIL_PORT=587
 MAIL_USE_TLS="True"
 MAIL_USERNAME="your-email@gmail.com"
 MAIL_PASSWORD="your-app-password"
-MAIL_DEFAULT_SENDER="AmbaNotes <your-email@gmail.com>"
+MAIL_DEFAULT_SENDER="AmbaNotes Team <your-email@gmail.com>"
 ```
 
 ### 5️⃣ Siapkan Model ML (Opsional)
@@ -406,7 +406,11 @@ Server akan berjalan di:
 | `GET` | `/notification/health` | Health check notification | ❌ |
 
 
-> 💡 **Tip:** Untuk dokumentasi interaktif lengkap beserta request/response schema, buka **Swagger UI** di `http://localhost:5009/apidocs` saat server berjalan.
+> 💡 **Tip:** Untuk dokumentasi interaktif lengkap beserta request/response schema, buka **Swagger UI** di `http://localhost:5009/apidocs`.
+>
+> **Instruksi Autentikasi Swagger:**
+> 1. Login via `/auth/login` untuk dapat token.
+> 2. Klik endpoint yang diproteksi, pada kolom **Authorization** masukkan: `Bearer <token>` atau langsung `<token>` (keduanya didukung).
 
 ---
 
@@ -510,11 +514,11 @@ curl -X POST http://localhost:5009/generator/surat-tugas \
 
 ## 📝 Catatan Pengembangan
 
-- **Logging Terpusat** — Seluruh service menggunakan fungsi `log_event()` dari `common/logger.py` untuk konsistensi pencatatan.
-- **Konfigurasi Terpusat** — Semua environment variable dikelola melalui `common/config.py` menggunakan `python-dotenv`.
-- **Model ML Lokal** — File model `.safetensors` di folder `models/` berukuran besar dan tidak di-push ke GitHub. Salin file model secara manual setelah clone.
-- **IndoBERT NER** — Model `cahya/bert-base-indonesian-NER` diunduh otomatis dari HuggingFace Hub saat pertama kali dijalankan.
-- **OCR via Gemini** — OCR menggunakan Google Gemini API (multimodal vision) untuk akurasi tinggi dan performa yang stabil.
+- **Penghapusan Tesseract** — Aplikasi ini resmi **tidak lagi menggunakan Tesseract OCR lokal**. Semua proses OCR kini ditangani oleh Gemini 1.5 Flash yang jauh lebih akurat.
+- **Logging Terpusat** — Seluruh service menggunakan fungsi `log_event()` dari `common/logger.py`.
+- **Konfigurasi Terpusat** — Semua environment variable dikelola melalui `common/config.py`.
+- **IndoBERT NER** — Model diunduh otomatis dari HuggingFace Hub.
+- **Swagger Fix** — Menggunakan Swagger 2.0 untuk stabilitas pengiriman request body dan header.
 - **Template HTML** — Generator Surat Tugas menggunakan Jinja2 `render_template_string` untuk fleksibilitas penuh. Output HTML dapat dikonversi ke PDF di sisi frontend.
 
 ---
