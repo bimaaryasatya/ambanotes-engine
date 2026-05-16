@@ -13,10 +13,12 @@ from common.db import docs_col
 import uuid
 import datetime
 
+from common.config import Config
+
 document_bp = Blueprint('document', __name__)
 
-# Base URL Gateway
-GATEWAY_URL = "http://localhost:5009"
+# Use central configuration
+GATEWAY_URL = Config.GATEWAY_URL
 
 def _get_auth_header():
     """Ambil Authorization header dari request yang sedang aktif untuk diteruskan ke service internal."""
@@ -47,6 +49,10 @@ def upload_document(current_user):
     ---
     tags:
       - Document
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     consumes:
@@ -119,6 +125,10 @@ def list_documents(current_user):
     ---
     tags:
       - Document
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     responses:
@@ -147,6 +157,10 @@ def delete_document(current_user, doc_id):
     ---
     tags:
       - Document
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     parameters:
@@ -190,6 +204,10 @@ def replace_document(current_user, doc_id):
     ---
     tags:
       - Document
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     description: >
@@ -253,8 +271,8 @@ def replace_document(current_user, doc_id):
             return jsonify({"error": f"OCR failed: {str(e)}"}), 500
     elif request.form.get("text"):
         new_text = request.form.get("text")
-    elif request.json and request.json.get("text"):
-        new_text = request.json.get("text")
+    elif request.get_json(force=True) and request.get_json(force=True).get("text"):
+        new_text = request.get_json(force=True).get("text")
 
     if not new_text:
         return jsonify({"error": "Either a file or text must be provided"}), 400

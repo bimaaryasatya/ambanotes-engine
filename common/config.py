@@ -10,7 +10,7 @@ class Config:
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key")
     MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "your-mistral-api-key")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "your-gemini-api-key")
-    TESSERACT_PATH = os.getenv("TESSERACT_PATH", r"C:\Program Files\Tesseract-OCR\tesseract.exe")
+    GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:5009")
 
     # Email Config
     MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")

@@ -32,6 +32,10 @@ def extract_entities(current_user):
     ---
     tags:
       - NER
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     parameters:
@@ -55,7 +59,7 @@ def extract_entities(current_user):
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     text = data.get('text', '')
 
     if not text:

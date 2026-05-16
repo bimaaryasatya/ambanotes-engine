@@ -224,6 +224,7 @@ FLASK_APP="api_gateway/api.py"
 FLASK_ENV="development"
 FLASK_DEBUG="1"
 PORT="5009"
+GATEWAY_URL="http://localhost:5009"
 
 # ─── Email (SMTP) ──────────────────────────────────
 MAIL_SERVER="smtp.gmail.com"
@@ -513,7 +514,7 @@ curl -X POST http://localhost:5009/generator/surat-tugas \
 - **Konfigurasi Terpusat** — Semua environment variable dikelola melalui `common/config.py` menggunakan `python-dotenv`.
 - **Model ML Lokal** — File model `.safetensors` di folder `models/` berukuran besar dan tidak di-push ke GitHub. Salin file model secara manual setelah clone.
 - **IndoBERT NER** — Model `cahya/bert-base-indonesian-NER` diunduh otomatis dari HuggingFace Hub saat pertama kali dijalankan.
-- **OCR via Gemini** — OCR menggunakan Google Gemini API (multimodal vision) untuk akurasi tinggi, menggantikan Tesseract.
+- **OCR via Gemini** — OCR menggunakan Google Gemini API (multimodal vision) untuk akurasi tinggi dan performa yang stabil.
 - **Template HTML** — Generator Surat Tugas menggunakan Jinja2 `render_template_string` untuk fleksibilitas penuh. Output HTML dapat dikonversi ke PDF di sisi frontend.
 
 ---

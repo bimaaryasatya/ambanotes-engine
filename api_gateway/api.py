@@ -78,6 +78,10 @@ def health_check():
     ---
     tags:
       - Gateway
+    consumes:
+      - application/json
+    produces:
+      - application/json
     responses:
       200:
         description: API Gateway is healthy

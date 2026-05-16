@@ -21,6 +21,10 @@ def create_reminder(current_user):
     ---
     tags:
       - Reminder
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     parameters:
@@ -55,7 +59,7 @@ def create_reminder(current_user):
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
     
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     task = data.get('task')
     date = data.get('date')
     
@@ -93,6 +97,10 @@ def list_reminders(current_user):
     ---
     tags:
       - Reminder
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     responses:
@@ -118,6 +126,10 @@ def delete_reminder(current_user, reminder_id):
     ---
     tags:
       - Reminder
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     parameters:

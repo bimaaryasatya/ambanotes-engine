@@ -74,6 +74,10 @@ def generate_surat_tugas(current_user):
     ---
     tags:
       - Generator
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     parameters:
@@ -106,7 +110,7 @@ def generate_surat_tugas(current_user):
     user_id = current_user.get('user_id')
     org_id = current_user.get('org_id')
     
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     doc_number = data.get('doc_number')
     task_description = data.get('task_description')
     signatory_name = data.get('signatory_name')
@@ -180,6 +184,10 @@ def verify_document(doc_hash):
     ---
     tags:
       - Generator
+    consumes:
+      - application/json
+    produces:
+      - application/json
     parameters:
       - name: doc_hash
         in: path

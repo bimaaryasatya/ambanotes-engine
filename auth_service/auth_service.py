@@ -45,9 +45,12 @@ def _validate_username(username: str) -> str | None:
 def register():
     """
     User Registration (Create/Join Organization)
-    ---
     tags:
       - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
     parameters:
       - name: body
         in: body
@@ -83,7 +86,7 @@ def register():
       201:
         description: User registered successfully
     """
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     username = data.get('username', '').strip()
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
@@ -159,6 +162,10 @@ def login():
     ---
     tags:
       - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
     parameters:
       - name: body
         in: body
@@ -181,7 +188,7 @@ def login():
       401:
         description: Invalid credentials
     """
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
 
@@ -252,6 +259,10 @@ def create_delegation(current_user):
     ---
     tags:
       - Enterprise
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     parameters:
@@ -270,7 +281,7 @@ def create_delegation(current_user):
       201:
         description: Delegation created
     """
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     name = data.get('name', '').strip()
     org_id = current_user.get('org_id')
 
@@ -293,6 +304,10 @@ def list_delegations(current_user):
     ---
     tags:
       - Enterprise
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     responses:
@@ -316,6 +331,10 @@ def change_delegation(current_user):
     ---
     tags:
       - Enterprise
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     parameters:
@@ -337,7 +356,7 @@ def change_delegation(current_user):
         description: Transfer successful
     """
     org_id = current_user.get('org_id')
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     target_user_id = data.get('target_user_id')
     new_del_id = data.get('new_delegation_id')
 
@@ -365,6 +384,10 @@ def upload_asset(current_user):
     ---
     tags:
       - Enterprise
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     parameters:
@@ -390,7 +413,7 @@ def upload_asset(current_user):
       201:
         description: Asset uploaded
     """
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     asset_type = data.get('type')
     delegation_id = data.get('delegation_id')
     image_data = data.get('image_data') 
@@ -432,7 +455,7 @@ def invite_member(current_user):
       201:
         description: Invitation sent
     """
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     email = data.get('email', '').strip().lower()
     role = data.get('role', 'member')
     org_id = current_user.get('org_id')
@@ -452,6 +475,10 @@ def change_password(current_user):
     ---
     tags:
       - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     parameters:
@@ -474,7 +501,7 @@ def change_password(current_user):
       401:
         description: Invalid old password
     """
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     old_password = data.get('old_password', '')
     new_password = data.get('new_password', '')
 
@@ -507,6 +534,10 @@ def forgot_password():
     ---
     tags:
       - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
     parameters:
       - name: body
         in: body
@@ -525,7 +556,7 @@ def forgot_password():
       404:
         description: User not found
     """
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     email = data.get('email', '').strip().lower()
 
     if not email:
@@ -564,6 +595,10 @@ def reset_password():
     ---
     tags:
       - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
     parameters:
       - name: body
         in: body
@@ -587,7 +622,7 @@ def reset_password():
       400:
         description: Invalid OTP or expired
     """
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     email = data.get('email', '').strip().lower()
     otp_input = data.get('otp', '').strip()
     new_password = data.get('new_password', '')

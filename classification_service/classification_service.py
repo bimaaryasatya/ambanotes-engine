@@ -84,6 +84,10 @@ def predict(current_user):
     ---
     tags:
       - Classification
+    consumes:
+      - application/json
+    produces:
+      - application/json
     security:
       - BearerAuth: []
     parameters:
@@ -114,7 +118,7 @@ def predict(current_user):
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
-    data = request.json or {}
+    data = request.get_json(force=True) or {}
     text = data.get('text', '')
     model_type = data.get('model_type', 'local').lower()
 
