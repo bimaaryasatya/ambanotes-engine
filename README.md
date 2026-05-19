@@ -93,7 +93,7 @@ Aplikasi ini menggunakan pola **API Gateway** dengan **Flask Blueprints**, di ma
 | Fitur | Deskripsi |
 |:------|:----------|
 | **OCR** | Ekstraksi teks dari gambar dokumen menggunakan Google Gemini API |
-| **Klasifikasi** | Klasifikasi otomatis jenis surat (Undangan, Permohonan, Tugas, dll.) |
+| **Klasifikasi** | Klasifikasi otomatis jenis surat (Hybrid: model lokal dengan **fallback otomatis ke online Gemini API** jika model dihapus/tidak ditemukan) |
 | **NER** | Pengenalan entitas (Nama, Lokasi, Organisasi) berbahasa Indonesia |
 | **Auto-Pipeline** | Upload → OCR → Klasifikasi → NER dijalankan otomatis dalam satu request |
 
@@ -219,6 +219,11 @@ JWT_SECRET_KEY="ganti-dengan-secret-key-yang-aman"
 MISTRAL_API_KEY="your-mistral-api-key"
 GEMINI_API_KEY="your-gemini-api-key"
 
+# ─── Google OAuth ──────────────────────────────────
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+GOOGLE_REDIRECT_URI="http://localhost:5000/auth/google/callback"
+
 # ─── Flask ─────────────────────────────────────────
 FLASK_APP="api_gateway/api.py"
 FLASK_ENV="development"
@@ -287,6 +292,8 @@ Server akan berjalan di:
 | `POST` | `/auth/forgot-password` | Request OTP reset password via email | ❌ | — |
 | `POST` | `/auth/reset-password` | Reset password menggunakan kode OTP | ❌ | — |
 | `POST` | `/auth/invite` | Undang member baru via email | ✅ | Owner |
+| `GET` | `/auth/google/connect` | Dapatkan URL Login Google OAuth 2.0 | ✅ | Any |
+| `GET` | `/auth/google/callback` | Callback Google OAuth untuk menukar token | ❌ | — |
 | `GET` | `/auth/health` | Health check auth service | ❌ | — |
 
 ---
@@ -306,8 +313,10 @@ Server akan berjalan di:
 
 | Method | Endpoint | Deskripsi | Auth | Role |
 |:-------|:---------|:----------|:-----|:-----|
-| `POST` | `/document/upload` | Upload dokumen (auto: OCR → Classify → NER) | ✅ | Any |
+| `POST` | `/document/upload` | Upload dokumen (Opsi C: Auto-upload Drive / Base64 lokal) | ✅ | Any |
 | `GET` | `/document/list` | List semua dokumen organisasi | ✅ | Any |
+| `GET` | `/document/<doc_id>` | Detail dokumen (+ Smart Suggestion Mistral AI) | ✅ | Any |
+| `POST` | `/document/migrate-to-drive` | Pemicu migrasi berkas biner ke Google Drive | ✅ | Any |
 | `DELETE` | `/document/<doc_id>` | Hapus dokumen | ✅ | Owner |
 | `PUT` | `/document/replace/<doc_id>` | Ganti & proses ulang dokumen | ✅ | Any |
 | `GET` | `/document/health` | Health check document service | ❌ | — |
@@ -514,6 +523,7 @@ curl -X POST http://localhost:5009/generator/surat-tugas \
 
 ## 📝 Catatan Pengembangan
 
+- **Klasifikasi Hybrid Otomatis** — Sistem klasifikasi kini memiliki kemampuan **Auto-Fallback**. Jika model lokal (`models/surat_model`) dihapus atau gagal dimuat, sistem akan otomatis dan secara senyap dialihkan menggunakan Gemini Pro API online sehingga server tidak akan mengembalikan error.
 - **Penghapusan Tesseract** — Aplikasi ini resmi **tidak lagi menggunakan Tesseract OCR lokal**. Semua proses OCR kini ditangani oleh Gemini 1.5 Flash yang jauh lebih akurat.
 - **Logging Terpusat** — Seluruh service menggunakan fungsi `log_event()` dari `common/logger.py`.
 - **Konfigurasi Terpusat** — Semua environment variable dikelola melalui `common/config.py`.

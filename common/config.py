@@ -12,6 +12,11 @@ class Config:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "your-gemini-api-key")
     GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:5009")
 
+    # Google OAuth Configuration
+    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "your-google-client-id")
+    GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "your-google-client-secret")
+    GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:5000/auth/google/callback")
+
     # Email Config
     MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
     MAIL_PORT = int(os.getenv("MAIL_PORT", 587))

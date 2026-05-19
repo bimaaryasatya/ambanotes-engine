@@ -1,6 +1,7 @@
 import os
 import sys
 import re
+import requests
 
 # Add parent directory to path so we can import from common
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,6 +12,7 @@ from common.db import users_col, orgs_col, invitations_col, delegations_col, ass
 from common.jwt_utils import generate_token, token_required, role_required
 from common.email_utils import send_otp_email
 from common.logger import log_event
+from common.config import Config
 from bson.objectid import ObjectId
 import uuid
 import secrets
@@ -721,6 +723,130 @@ def reset_password():
     log_event("auth_service", f"Password reset successful for {email}")
 
     return jsonify({"message": "Password has been reset successfully"}), 200
+
+
+@auth_bp.route('/google/connect', methods=['GET'])
+@token_required
+def google_connect(current_user):
+    """
+    Get Google OAuth 2.0 Consent Screen URL
+    ---
+    tags:
+      - Integration
+    security:
+      - BearerAuth: []
+    responses:
+      200:
+        description: Returns the URL to redirect the user to Google Login
+    """
+    user_id = current_user.get("user_id")
+    client_id = Config.GOOGLE_CLIENT_ID
+    redirect_uri = Config.GOOGLE_REDIRECT_URI
+    scope = "https://www.googleapis.com/auth/drive.file"
+    
+    # State berisi user_id agar saat callback kita tahu siapa yang melakukan otorisasi
+    auth_url = (
+        "https://accounts.google.com/o/oauth2/v2/auth?"
+        "response_type=code&"
+        f"client_id={client_id}&"
+        f"redirect_uri={redirect_uri}&"
+        f"scope={scope}&"
+        "access_type=offline&"
+        "prompt=consent&"
+        f"state={user_id}"
+    )
+    
+    return jsonify({"auth_url": auth_url}), 200
+
+
+@auth_bp.route('/google/callback', methods=['GET'])
+def google_callback():
+    """
+    Callback Google OAuth 2.0 untuk menerima authorization code
+    """
+    code = request.args.get("code")
+    user_id = request.args.get("state")
+    
+    if not code or not user_id:
+        return "<h3>Error: Otorisasi Google Drive tidak valid (Missing code or state)</h3>", 400
+        
+    # Tukar authorization code dengan tokens
+    payload = {
+        "client_id": Config.GOOGLE_CLIENT_ID,
+        "client_secret": Config.GOOGLE_CLIENT_SECRET,
+        "code": code,
+        "redirect_uri": Config.GOOGLE_REDIRECT_URI,
+        "grant_type": "authorization_code"
+    }
+    
+    try:
+        res = requests.post("https://oauth2.googleapis.com/token", data=payload, timeout=10)
+        if res.status_code != 200:
+            return f"<h3>Gagal menukar token Google: {res.text}</h3>", 400
+            
+        token_data = res.json()
+        access_token = token_data.get("access_token")
+        refresh_token = token_data.get("refresh_token")
+        expires_in = token_data.get("expires_in", 3600)
+        expiry_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=expires_in)
+        
+        # Simpan tokens di database MongoDB koleksi users_col menggunakan dot-notation
+        update_data = {
+            "google_drive_connected": True,
+            "google_oauth.access_token": access_token,
+            "google_oauth.token_expiry": expiry_time
+        }
+        
+        if refresh_token:
+            update_data["google_oauth.refresh_token"] = refresh_token
+            
+        result = users_col.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": update_data}
+        )
+        
+        if result.matched_count == 0:
+            return "<h3>Error: Pengguna tidak ditemukan di sistem.</h3>", 404
+            
+        log_event("auth_service", f"Google Drive successfully connected for user: {user_id}", user_id=user_id, action="GOOGLE_DRIVE_CONNECTED")
+        
+        # Memicu migrasi dokumen lama dari MongoDB ke Google Drive
+        try:
+            requests.post(
+                f"{Config.GATEWAY_URL}/document/migrate-to-drive", 
+                json={"user_id": user_id}, 
+                headers={"Authorization": request.headers.get("Authorization", "")}, 
+                timeout=1
+            )
+        except Exception:
+            # Abaikan timeout karena pemanggilan async/background
+            pass
+            
+        return """
+        <html>
+            <head>
+                <title>Koneksi Sukses</title>
+                <style>
+                    body { font-family: sans-serif; text-align: center; padding-top: 50px; background-color: #f7f9fa; }
+                    .container { max-width: 500px; margin: 0 auto; padding: 30px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                    h2 { color: #2e7d32; }
+                    p { color: #555; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>Koneksi Google Drive Berhasil!</h2>
+                    <p>Akun Google Drive Anda telah sukses terhubung ke AmbaNotes.</p>
+                    <p>Semua dokumen fisik Anda sedang dipindahkan ke Drive pribadi Anda secara aman.</p>
+                    <p>Anda dapat menutup halaman ini sekarang dan kembali ke aplikasi.</p>
+                </div>
+            </body>
+        </html>
+        """, 200
+        
+    except Exception as e:
+        log_event("auth_service", f"Error sewaktu Google Callback: {str(e)}", user_id=user_id, action="GOOGLE_CALLBACK_ERROR")
+        return f"<h3>Terjadi kesalahan sistem: {str(e)}</h3>", 500
 
 
 @auth_bp.route('/health', methods=['GET'])

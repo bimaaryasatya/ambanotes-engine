@@ -138,20 +138,29 @@ def predict(current_user):
         if model_type == 'gemini':
             result = _predict_gemini(text)
         else:
-            # Default to local
+            # Default menggunakan model lokal
             if classifier is None:
-                return jsonify({"error": "Local model is not loaded. Please use model_type='gemini' as fallback."}), 500
-            
-            raw_result = classifier(text)[0]
-            original_label = raw_result.get('label')
-            result = {
-                "label": original_label,
-                "label_name": LABEL_MAPPING.get(original_label, "Unknown"),
-                "score": float(raw_result.get('score', 0)),
-                "provider": "local"
-            }
+                # Otorun Fallback Otomatis ke Gemini Online jika model lokal dihapus/tidak terdeteksi
+                log_event("classification_service", "Model lokal tidak ditemukan/gagal dimuat. Mengalihkan otomatis ke Gemini Online.",
+                          user_id=user_id, org_id=org_id, action="CLASS_AUTO_FALLBACK_GEMINI")
+                result = _predict_gemini(text)
+            else:
+                try:
+                    raw_result = classifier(text)[0]
+                    original_label = raw_result.get('label')
+                    result = {
+                        "label": original_label,
+                        "label_name": LABEL_MAPPING.get(original_label, "Unknown"),
+                        "score": float(raw_result.get('score', 0)),
+                        "provider": "local"
+                    }
+                except Exception as local_err:
+                    # Fallback jika model ada tapi terjadi error sewaktu eksekusi
+                    log_event("classification_service", f"Klasifikasi lokal gagal ({str(local_err)}). Mengalihkan otomatis ke Gemini.",
+                              user_id=user_id, org_id=org_id, action="CLASS_AUTO_FALLBACK_GEMINI")
+                    result = _predict_gemini(text)
         
-        log_event("classification_service", f"Prediction successful ({model_type}): {result['label_name']}",
+        log_event("classification_service", f"Prediction successful ({result['provider']}): {result['label_name']}",
                   user_id=user_id, org_id=org_id, action="CLASS_PREDICT_SUCCESS", metadata={"result": result})
         return jsonify(result), 200
 
