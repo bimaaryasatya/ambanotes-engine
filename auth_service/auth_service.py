@@ -620,6 +620,34 @@ def change_password(current_user):
     return jsonify({"message": "Password updated successfully"}), 200
 
 
+@auth_bp.route('/delete-account', methods=['DELETE'])
+@token_required
+def delete_account(current_user):
+    """
+    Delete User Account (Authenticated)
+    ---
+    tags:
+      - Auth
+    security:
+      - BearerAuth: []
+    responses:
+      200:
+        description: Account deleted successfully
+      404:
+        description: User not found
+    """
+    user_id = current_user.get('user_id')
+    user = users_col.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    # Delete the user from users collection
+    users_col.delete_one({"_id": ObjectId(user_id)})
+
+    log_event("auth_service", f"User account deleted for user: {user.get('username') or user.get('email')}", user_id=user_id, action="ACCOUNT_DELETED")
+
+    return jsonify({"message": "Akun Anda telah berhasil dihapus selamanya."}), 200
+
 
 @auth_bp.route('/forgot-password', methods=['POST'])
 def forgot_password():
