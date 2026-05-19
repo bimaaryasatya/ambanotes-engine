@@ -261,7 +261,8 @@ def get_profile(current_user):
         "email": user['email'],
         "role": user.get('role', 'member'),
         "org_id": user.get('org_id'),
-        "delegation_id": user.get('delegation_id')
+        "delegation_id": user.get('delegation_id'),
+        "google_drive_connected": user.get('google_drive_connected', False)
     }
     
     if user.get('delegation_id'):
@@ -725,6 +726,40 @@ def reset_password():
     return jsonify({"message": "Password has been reset successfully"}), 200
 
 
+@auth_bp.route('/google/disconnect', methods=['POST'])
+@token_required
+def google_disconnect(current_user):
+    """
+    Disconnect Google Drive Account
+    ---
+    tags:
+      - Integration
+    security:
+      - BearerAuth: []
+    responses:
+      200:
+        description: Google Drive successfully disconnected
+      500:
+        description: Failed to disconnect
+    """
+    user_id = current_user.get("user_id")
+    try:
+        users_col.update_one(
+            {"_id": ObjectId(user_id)},
+            {
+                "$set": {
+                    "google_drive_connected": False,
+                    "google_oauth": {}
+                }
+            }
+        )
+        log_event("auth_service", f"User {user_id} disconnected Google Drive", user_id=user_id, action="GOOGLE_DRIVE_DISCONNECTED")
+        return jsonify({"message": "Google Drive berhasil diputuskan."}), 200
+    except Exception as e:
+        log_event("auth_service", f"Gagal memutuskan Google Drive: {str(e)}", user_id=user_id, action="GOOGLE_DRIVE_DISCONNECT_FAILED")
+        return jsonify({"error": f"Gagal memutuskan koneksi: {str(e)}"}), 500
+
+
 @auth_bp.route('/google/connect', methods=['GET'])
 @token_required
 def google_connect(current_user):
@@ -739,10 +774,12 @@ def google_connect(current_user):
       200:
         description: Returns the URL to redirect the user to Google Login
     """
+    import urllib.parse
+    
     user_id = current_user.get("user_id")
     client_id = Config.GOOGLE_CLIENT_ID
-    redirect_uri = Config.GOOGLE_REDIRECT_URI
-    scope = "https://www.googleapis.com/auth/drive.file"
+    redirect_uri = urllib.parse.quote(Config.GOOGLE_REDIRECT_URI)
+    scope = urllib.parse.quote("https://www.googleapis.com/auth/drive.file")
     
     # State berisi user_id agar saat callback kita tahu siapa yang melakukan otorisasi
     auth_url = (
@@ -782,6 +819,7 @@ def google_callback():
     try:
         res = requests.post("https://oauth2.googleapis.com/token", data=payload, timeout=10)
         if res.status_code != 200:
+            log_event("auth_service", f"Gagal menukar token Google: {res.text}", user_id=user_id, action="GOOGLE_TOKEN_EXCHANGE_FAILED", metadata={"response": res.text, "status_code": res.status_code})
             return f"<h3>Gagal menukar token Google: {res.text}</h3>", 400
             
         token_data = res.json()

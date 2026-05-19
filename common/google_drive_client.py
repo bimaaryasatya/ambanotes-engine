@@ -86,6 +86,7 @@ def upload_file_to_google_drive(file_stream, filename, mimetype, refresh_token):
     Mengunggah file biner ke Google Drive milik user secara multipart.
     Mengembalikan dict berisi file_id, web_view_link, dan web_content_link jika sukses.
     """
+    import uuid
     # 1. Dapatkan access token baru dengan me-refresh refresh_token
     token_data = refresh_access_token(refresh_token)
     if not token_data:
@@ -93,27 +94,44 @@ def upload_file_to_google_drive(file_stream, filename, mimetype, refresh_token):
         
     access_token = token_data["access_token"]
     
-    # 2. Siapkan data multipart untuk upload
+    # 2. Siapkan data multipart secara manual agar berformat multipart/related
     metadata = {
         "name": filename,
         "description": "Surat diunggah melalui AmbaNotes AI Engine"
     }
     
-    # Buat request payload multipart secara manual
-    # Part 1: Metadata (JSON)
-    # Part 2: Berkas Media (Biner)
-    files = {
-        "metadata": (None, json.dumps(metadata), "application/json; charset=UTF-8"),
-        "file": (filename, file_stream, mimetype)
+    boundary = f"AmbaNotesBoundary{uuid.uuid4().hex}"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": f"multipart/related; boundary={boundary}"
     }
     
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
+    metadata_part = (
+        f"--{boundary}\r\n"
+        "Content-Type: application/json; charset=UTF-8\r\n\r\n"
+        f"{json.dumps(metadata)}\r\n"
+    )
+    
+    file_header = (
+        f"--{boundary}\r\n"
+        f"Content-Type: {mimetype}\r\n\r\n"
+    )
+    
+    close_part = f"\r\n--{boundary}--\r\n"
+    
+    # Membaca byte berkas dari file_stream
+    if hasattr(file_stream, "read"):
+        file_bytes = file_stream.read()
+    elif isinstance(file_stream, bytes):
+        file_bytes = file_stream
+    else:
+        file_bytes = str(file_stream).encode("utf-8")
+        
+    body = metadata_part.encode("utf-8") + file_header.encode("utf-8") + file_bytes + close_part.encode("utf-8")
     
     try:
         # Kirim request ke Google Drive Upload API
-        response = requests.post(GOOGLE_DRIVE_UPLOAD_URL, files=files, headers=headers, timeout=30)
+        response = requests.post(GOOGLE_DRIVE_UPLOAD_URL, data=body, headers=headers, timeout=30)
         
         if response.status_code == 200:
             res_json = response.json()

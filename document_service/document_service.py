@@ -493,7 +493,9 @@ def migrate_to_drive():
         "google_drive": None
     }))
     
+    total_to_migrate = len(docs_to_migrate)
     migrated_count = 0
+    failed_count = 0
     
     for doc in docs_to_migrate:
         try:
@@ -526,13 +528,16 @@ def migrate_to_drive():
             migrated_count += 1
             
         except Exception as e:
+            failed_count += 1
             log_event("document_service", f"Gagal migrasi dokumen {doc.get('doc_id')}: {str(e)}", action="MIGRATION_DOC_FAILED")
             
     log_event("document_service", f"Sukses migrasi {migrated_count} dokumen ke Google Drive untuk user {user_id}", action="MIGRATION_SUCCESS")
     
     return jsonify({
         "message": f"Successfully migrated {migrated_count} documents to Google Drive",
-        "migrated_count": migrated_count
+        "migrated_count": migrated_count,
+        "failed_count": failed_count,
+        "total_to_migrate": total_to_migrate
     }), 200
 
 
