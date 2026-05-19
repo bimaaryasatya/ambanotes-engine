@@ -1,5 +1,5 @@
-from insight_service.utils.text_cleaner import clean_text
-from insight_service.services.mongo_service import get_dataframe
+from ..utils.text_cleaner import clean_text
+from .mongo_service import get_dataframe
 import pandas as pd
 
 
@@ -41,6 +41,16 @@ def generate_insight():
 
     df["event_category"] = df["clean_caption"].apply(detect_event)
 
+    # Extract top keywords for word cloud
+    word_counts = {}
+    for caption in df["clean_caption"]:
+        if caption:
+            for word in caption.split():
+                if len(word) > 3:
+                    word_counts[word] = word_counts.get(word, 0) + 1
+    top_words = sorted(word_counts.items(), key=lambda x: x[1], reverse=True)[:20]
+    word_cloud = [{"word": k, "count": int(v)} for k, v in top_words]
+
     insights = {
         "total_posts": len(df),
 
@@ -57,7 +67,9 @@ def generate_insight():
             df["day"].value_counts().to_dict(),
 
         "event_trends":
-            df["event_category"].value_counts().to_dict()
+            df["event_category"].value_counts().to_dict(),
+
+        "word_cloud": word_cloud
     }
 
     return insights

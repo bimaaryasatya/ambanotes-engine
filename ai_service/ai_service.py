@@ -11,6 +11,18 @@ from common.config import Config
 from common.logger import log_event
 from common.jwt_utils import token_required
 from common.db import docs_col, reminders_col
+import google.generativeai as genai
+
+# Konfigurasi Gemini API
+genai.configure(api_key=Config.GEMINI_API_KEY)
+
+def _call_gemini(prompt, system_instruction=None):
+    model = genai.GenerativeModel(
+        model_name='gemini-2.5-flash',
+        system_instruction=system_instruction
+    )
+    response = model.generate_content(prompt)
+    return response.text
 
 ai_bp = Blueprint('ai', __name__)
 
@@ -70,19 +82,7 @@ def summarize(current_user):
             return jsonify({"error": "No text provided"}), 400
 
         prompt = f"Tolong buatkan ringkasan singkat dan padat dari teks dokumen berikut ini:\n\n{text}"
-
-        response = requests.post(
-            "https://api.mistral.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
-            json={
-                "model": "mistral-small",
-                "messages": [{"role": "user", "content": prompt}]
-            }
-        )
-
-        response.raise_for_status()
-        result = response.json()
-        summary = result['choices'][0]['message']['content']
+        summary = _call_gemini(prompt)
 
         log_event("ai_service", "Summary generated successfully",
                   user_id=user_id, org_id=org_id, action="AI_SUMMARIZE_SUCCESS")
@@ -147,24 +147,8 @@ def chat(current_user):
         user_message = data.get("message", "")
         context = data.get("context", "")
 
-        messages = []
-        if context:
-            messages.append({"role": "system", "content": f"Anda adalah asisten cerdas AmbaNotes. Gunakan konteks dokumen berikut untuk menjawab: {context}"})
-
-        messages.append({"role": "user", "content": user_message})
-
-        response = requests.post(
-            "https://api.mistral.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
-            json={
-                "model": "mistral-small",
-                "messages": messages
-            }
-        )
-
-        response.raise_for_status()
-        result = response.json()
-        answer = result['choices'][0]['message']['content']
+        system_instruction = f"Anda adalah asisten cerdas AmbaNotes. Gunakan konteks dokumen berikut untuk menjawab: {context}" if context else "Anda adalah asisten cerdas AmbaNotes."
+        answer = _call_gemini(user_message, system_instruction=system_instruction)
 
         log_event("ai_service", "Chat response generated",
                   user_id=user_id, org_id=org_id, action="AI_CHAT_SUCCESS")
@@ -252,36 +236,18 @@ def chat_global(current_user):
         if len(global_context) > 15000:
             global_context = global_context[:15000] + "... [Konteks dipotong]"
 
-        messages = [
-            {
-                "role": "system", 
-                "content": (
-                    "Anda adalah asisten cerdas AmbaNotes. Tugas Anda adalah membantu pengguna mengelola "
-                    "dan menganalisis seluruh dokumen di organisasi mereka.\n\n"
-                    "ATURAN PENTING:\n"
-                    "1. Jika Anda mengambil informasi dari dokumen tertentu, Anda WAJIB mencantumkan ID dokumen tersebut "
-                    "di akhir kalimat yang relevan menggunakan format [[DOKUMEN_ID]].\n"
-                    "   Contoh: 'Rapat akan diadakan pada tanggal 20 Mei [[abc-123]].'\n"
-                    "2. Gunakan informasi HANYA dari dokumen yang disediakan di atas.\n"
-                    "3. Jika jawaban melibatkan banyak dokumen, cantumkan semua ID yang relevan.\n\n"
-                    f"KONTEKS DOKUMEN:\n{global_context}"
-                )
-            },
-            {"role": "user", "content": user_message}
-        ]
-
-        response = requests.post(
-            "https://api.mistral.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
-            json={
-                "model": "mistral-small",
-                "messages": messages
-            }
+        system_instruction = (
+            "Anda adalah asisten cerdas AmbaNotes. Tugas Anda adalah membantu pengguna mengelola "
+            "dan menganalisis seluruh dokumen di organisasi mereka.\n\n"
+            "ATURAN PENTING:\n"
+            "1. Jika Anda mengambil informasi dari dokumen tertentu, Anda WAJIB mencantumkan ID dokumen tersebut "
+            "di akhir kalimat yang relevan menggunakan format [[DOKUMEN_ID]].\n"
+            "   Contoh: 'Rapat akan diadakan pada tanggal 20 Mei [[abc-123]].'\n"
+            "2. Gunakan informasi HANYA dari dokumen yang disediakan di atas.\n"
+            "3. Jika jawaban melibatkan banyak dokumen, cantumkan semua ID yang relevan.\n\n"
+            f"KONTEKS DOKUMEN:\n{global_context}"
         )
-
-        response.raise_for_status()
-        result = response.json()
-        answer = result['choices'][0]['message']['content']
+        answer = _call_gemini(user_message, system_instruction=system_instruction)
 
         # Extract citations [[...]] using Regex
         citation_ids = re.findall(r"\[\[(.*?)\]\]", answer)
@@ -549,17 +515,7 @@ def translate_text(current_user):
             f"Teks: {text}"
         )
 
-        response = requests.post(
-            "https://api.mistral.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
-            json={
-                "model": "mistral-small",
-                "messages": [{"role": "user", "content": prompt}]
-            }
-        )
-        
-        response.raise_for_status()
-        translated = response.json()['choices'][0]['message']['content']
+        translated = _call_gemini(prompt)
 
         log_event("ai_service", "Translation successful", user_id=user_id, org_id=org_id, action="AI_TRANSLATE_SUCCESS")
         return jsonify({"translated_text": translated}), 200
@@ -718,17 +674,7 @@ def redact_sensitive(current_user):
             f"Teks:\n{text}"
         )
 
-        response = requests.post(
-            "https://api.mistral.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
-            json={
-                "model": "mistral-small",
-                "messages": [{"role": "user", "content": prompt}]
-            }
-        )
-        
-        response.raise_for_status()
-        redacted = response.json()['choices'][0]['message']['content']
+        redacted = _call_gemini(prompt)
 
         log_event("ai_service", "Sensitive data redacted", user_id=user_id, org_id=org_id, action="AI_REDACT_SUCCESS")
         return jsonify({"redacted_text": redacted}), 200
@@ -986,17 +932,7 @@ def analyze_workflow(current_user):
             "}"
         )
 
-        response = requests.post(
-            "https://api.mistral.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
-            json={
-                "model": "mistral-small",
-                "messages": [{"role": "user", "content": prompt}]
-            }
-        )
-        
-        response.raise_for_status()
-        content = response.json()['choices'][0]['message']['content']
+        content = _call_gemini(prompt)
         json_match = re.search(r"\{.*\}", content, re.DOTALL)
         analysis = json.loads(json_match.group()) if json_match else {"error": "Analysis failed"}
 
@@ -1136,17 +1072,7 @@ def analyze_priority(current_user):
             f"Teks:\n{text}"
         )
 
-        response = requests.post(
-            "https://api.mistral.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
-            json={
-                "model": "mistral-small",
-                "messages": [{"role": "user", "content": prompt}]
-            }
-        )
-        
-        response.raise_for_status()
-        content = response.json()['choices'][0]['message']['content']
+        content = _call_gemini(prompt)
         json_match = re.search(r"\{.*\}", content, re.DOTALL)
         analysis = json.loads(json_match.group()) if json_match else {"error": "Analysis failed"}
 

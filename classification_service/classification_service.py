@@ -14,7 +14,7 @@ classification_bp = Blueprint('classification', __name__)
 
 # Configure Gemini
 genai.configure(api_key=Config.GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel('gemini-pro')
+gemini_model = genai.GenerativeModel('gemini-2.5-flash')
 
 LABEL_MAPPING = {
     "LABEL_0": "Surat Undangan",
