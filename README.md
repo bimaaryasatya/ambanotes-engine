@@ -289,6 +289,7 @@ Server akan berjalan di:
 | `POST` | `/auth/login` | Login & dapatkan JWT token | ❌ | — |
 | `GET` | `/auth/profile` | Lihat profil user yang sedang login | ✅ | Any |
 | `POST` | `/auth/change-password` | Ganti password (saat login) | ✅ | Any |
+| `DELETE`| `/auth/delete-account`| Hapus akun pengguna secara permanen | ✅ | Any |
 | `POST` | `/auth/forgot-password` | Request OTP reset password via email | ❌ | — |
 | `POST` | `/auth/reset-password` | Reset password menggunakan kode OTP | ❌ | — |
 | `POST` | `/auth/invite` | Undang member baru (otomatis kirim email HTML via SMTP & auto-link) | ✅ | Owner |
