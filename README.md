@@ -295,6 +295,7 @@ Server akan berjalan di:
 | `POST` | `/auth/invite` | Undang member baru (otomatis kirim email HTML via SMTP & auto-link) | ✅ | Owner |
 | `GET` | `/auth/google/connect` | Dapatkan URL Login Google OAuth 2.0 | ✅ | Any |
 | `GET` | `/auth/google/callback` | Callback Google OAuth untuk menukar token | ❌ | — |
+| `POST` | `/auth/google/disconnect` | Putuskan koneksi Google Drive dari akun | ✅ | Any |
 | `GET` | `/auth/health` | Health check auth service | ❌ | — |
 
 ---
@@ -303,10 +304,16 @@ Server akan berjalan di:
 
 | Method | Endpoint | Deskripsi | Auth | Role |
 |:-------|:---------|:----------|:-----|:-----|
+| `GET` | `/auth/members` | List semua anggota organisasi | ✅ | Owner |
 | `POST` | `/auth/delegations` | Buat unit/dinas baru | ✅ | Owner |
 | `GET` | `/auth/delegations` | List semua unit dalam organisasi | ✅ | Any |
+| `PUT` | `/auth/delegations/<id>` | Ubah nama unit/dinas | ✅ | Owner |
+| `DELETE` | `/auth/delegations/<id>` | Hapus unit/dinas | ✅ | Owner |
 | `POST` | `/auth/change-delegation` | Mutasi pegawai ke unit lain | ✅ | Owner |
 | `POST` | `/auth/assets` | Upload kop surat / TTD digital | ✅ | Owner |
+| `GET` | `/auth/assets` | List semua aset organisasi (kop & TTD) | ✅ | Any |
+| `PUT` | `/auth/assets/<id>` | Update nama/gambar aset | ✅ | Owner |
+| `DELETE` | `/auth/assets/<id>` | Hapus aset organisasi | ✅ | Owner |
 
 ---
 
@@ -349,7 +356,7 @@ Server akan berjalan di:
 
 ---
 
-### 🤖 AI Jarvis Service (`/ai`)
+### 🤖 AI Service (`/ai`)
 
 | Method | Endpoint | Deskripsi | Auth |
 |:-------|:---------|:----------|:-----|
@@ -379,7 +386,6 @@ Server akan berjalan di:
 | `GET` | `/generator/verify/<hash>` | Verifikasi keaslian dokumen (Anti-Fraud) | ❌ |
 | `GET` | `/generator/health` | Health check generator | ❌ |
 
-| `GET` | `/generator/health` | Health check generator | ❌ |
 
 ---
 

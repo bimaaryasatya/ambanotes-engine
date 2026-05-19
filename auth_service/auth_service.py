@@ -568,6 +568,111 @@ def list_assets(current_user):
     return jsonify(asset_list), 200
 
 
+@auth_bp.route('/assets/<asset_id>', methods=['DELETE'])
+@token_required
+@role_required('owner')
+def delete_asset(current_user, asset_id):
+    """
+    Delete an Asset (Owner Only)
+    ---
+    tags:
+      - Enterprise
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
+      - name: asset_id
+        in: path
+        type: string
+        required: true
+    responses:
+      200:
+        description: Asset deleted
+      404:
+        description: Asset not found
+    """
+    org_id = current_user.get('org_id')
+    try:
+        result = assets_col.delete_one({"_id": ObjectId(asset_id), "org_id": org_id})
+        if result.deleted_count == 0:
+            return jsonify({"error": "Asset not found"}), 404
+        log_event("auth_service", f"Asset {asset_id} deleted",
+                  user_id=current_user.get('user_id'), org_id=org_id, action="ASSET_DELETE")
+        return jsonify({"message": "Asset deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": "Invalid asset ID", "details": str(e)}), 400
+
+
+@auth_bp.route('/assets/<asset_id>', methods=['PUT'])
+@token_required
+@role_required('owner')
+def update_asset(current_user, asset_id):
+    """
+    Update an Asset Name or Image (Owner Only)
+    ---
+    tags:
+      - Enterprise
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
+      - name: asset_id
+        in: path
+        type: string
+        required: true
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            name:
+              type: string
+            image_data:
+              type: string
+              description: Base64 image string (optional, only if replacing image)
+    responses:
+      200:
+        description: Asset updated
+      404:
+        description: Asset not found
+    """
+    org_id = current_user.get('org_id')
+    data = request.get_json(force=True, silent=True) or {}
+
+    update_fields = {"updated_at": datetime.datetime.utcnow()}
+    if 'name' in data and data['name'].strip():
+        update_fields['name'] = data['name'].strip()
+    if 'image_data' in data and data['image_data']:
+        update_fields['image_data'] = data['image_data']
+
+    if len(update_fields) <= 1:
+        return jsonify({"error": "No fields to update"}), 400
+
+    try:
+        result = assets_col.update_one(
+            {"_id": ObjectId(asset_id), "org_id": org_id},
+            {"$set": update_fields}
+        )
+        if result.matched_count == 0:
+            return jsonify({"error": "Asset not found"}), 404
+        log_event("auth_service", f"Asset {asset_id} updated",
+                  user_id=current_user.get('user_id'), org_id=org_id, action="ASSET_UPDATE")
+        return jsonify({"message": "Asset updated successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": "Invalid asset ID", "details": str(e)}), 400
+
+
 @auth_bp.route('/delegations/<delegation_id>', methods=['PUT'])
 @token_required
 @role_required('owner')
