@@ -291,7 +291,7 @@ Server akan berjalan di:
 | `POST` | `/auth/change-password` | Ganti password (saat login) | ✅ | Any |
 | `POST` | `/auth/forgot-password` | Request OTP reset password via email | ❌ | — |
 | `POST` | `/auth/reset-password` | Reset password menggunakan kode OTP | ❌ | — |
-| `POST` | `/auth/invite` | Undang member baru via email | ✅ | Owner |
+| `POST` | `/auth/invite` | Undang member baru (otomatis kirim email HTML via SMTP & auto-link) | ✅ | Owner |
 | `GET` | `/auth/google/connect` | Dapatkan URL Login Google OAuth 2.0 | ✅ | Any |
 | `GET` | `/auth/google/callback` | Callback Google OAuth untuk menukar token | ❌ | — |
 | `GET` | `/auth/health` | Health check auth service | ❌ | — |
@@ -398,7 +398,7 @@ Server akan berjalan di:
 
 | Method | Endpoint | Deskripsi | Auth |
 |:-------|:---------|:----------|:-----|
-| `POST` | `/reminder/` | Buat pengingat/tugas baru | ✅ |
+| `POST` | `/reminder/` | Buat pengingat/tugas baru (otomatis sinkronisasi ke Google Calendar jika terhubung) | ✅ |
 | `GET` | `/reminder/` | List semua pengingat organisasi | ✅ |
 | `DELETE` | `/reminder/<id>` | Hapus pengingat | ✅ |
 | `GET` | `/reminder/health` | Health check reminder | ❌ |

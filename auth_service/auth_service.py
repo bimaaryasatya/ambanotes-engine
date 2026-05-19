@@ -10,7 +10,7 @@ from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash, check_password_hash
 from common.db import users_col, orgs_col, invitations_col, delegations_col, assets_col, docs_col, otps_col
 from common.jwt_utils import generate_token, token_required, role_required
-from common.email_utils import send_otp_email
+from common.email_utils import send_otp_email, send_invitation_email
 from common.logger import log_event
 from common.config import Config
 from bson.objectid import ObjectId
@@ -523,9 +523,36 @@ def invite_member(current_user):
 
     if not email:
         return jsonify({"error": "Email is required"}), 400
+
+    # Retrieve organization name
+    org = None
+    if org_id:
+        try:
+            org = orgs_col.find_one({"_id": ObjectId(org_id) if isinstance(org_id, str) else org_id})
+        except Exception:
+            org = orgs_col.find_one({"_id": org_id})
+    org_name = org.get('name') if org else "Personal Workspace"
+    inviter_name = current_user.get('username') or current_user.get('email') or "Admin"
+
+    # Send beautiful HTML invitation email first
+    mail_success, mail_msg = send_invitation_email(email, org_name, inviter_name)
     
-    invitations_col.insert_one({"email": email, "org_id": org_id, "role": role, "status": "pending", "created_at": datetime.datetime.utcnow()})
-    return jsonify({"message": "Invitation sent successfully"}), 201
+    if not mail_success:
+        log_event("auth_service", f"Failed to send email to {email}: {mail_msg}", action="INVITE_EMAIL_FAILED")
+        return jsonify({
+            "error": f"Gagal mengirim email undangan: {mail_msg}. Pastikan konfigurasi SMTP di file .env sudah benar."
+        }), 400
+
+    # Store invitation state in MongoDB ONLY if email was successfully sent
+    invitations_col.insert_one({
+        "email": email, 
+        "org_id": org_id, 
+        "role": role, 
+        "status": "pending", 
+        "created_at": datetime.datetime.utcnow()
+    })
+
+    return jsonify({"message": "Invitation sent successfully to email"}), 201
 
 
 @auth_bp.route('/change-password', methods=['POST'])

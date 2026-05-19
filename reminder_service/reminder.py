@@ -9,7 +9,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Blueprint, request, jsonify
 from common.logger import log_event
 from common.jwt_utils import token_required
-from common.db import reminders_col
+from common.db import reminders_col, users_col
+from common.google_drive_client import refresh_access_token
+import requests
 
 reminder_bp = Blueprint('reminder', __name__)
 
@@ -72,6 +74,70 @@ def create_reminder(current_user):
     if not task or not date:
         return jsonify({"error": "Task and Date are required"}), 400
 
+    # 1. Hubungkan ke Google Calendar jika Google terhubung
+    calendar_event_id = None
+    try:
+        user_data = users_col.find_one({"_id": ObjectId(user_id)})
+        google_drive_connected = user_data.get("google_drive_connected", False) if user_data else False
+        
+        if google_drive_connected:
+            refresh_token = user_data.get("google_oauth", {}).get("refresh_token")
+            if refresh_token:
+                token_data = refresh_access_token(refresh_token)
+                if token_data:
+                    access_token = token_data["access_token"]
+                    
+                    headers = {
+                        "Authorization": f"Bearer {access_token}",
+                        "Content-Type": "application/json"
+                    }
+                    
+                    event_time = data.get('time', '09:00')
+                    if not event_time:
+                        event_time = '09:00'
+                    
+                    if len(event_time) == 5:
+                        start_iso = f"{date}T{event_time}:00"
+                        try:
+                            hh, mm = map(int, event_time.split(':'))
+                            end_hh = (hh + 1) % 24
+                            end_iso = f"{date}T{end_hh:02d}:{mm:02d}:00"
+                        except Exception:
+                            end_iso = f"{date}T10:00:00"
+                    else:
+                        start_iso = f"{date}T09:00:00"
+                        end_iso = f"{date}T10:00:00"
+                    
+                    calendar_payload = {
+                        "summary": task,
+                        "description": f"Pengingat otomatis dari dokumen AmbaNotes. Lokasi: {data.get('location', '-')}",
+                        "start": {
+                            "dateTime": start_iso,
+                            "timeZone": "Asia/Jakarta"
+                        },
+                        "end": {
+                            "dateTime": end_iso,
+                            "timeZone": "Asia/Jakarta"
+                        }
+                    }
+                    
+                    cal_res = requests.post(
+                        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+                        headers=headers,
+                        json=calendar_payload,
+                        timeout=10
+                    )
+                    if cal_res.status_code in [200, 201]:
+                        calendar_event_id = cal_res.json().get("id")
+                        log_event("reminder_service", f"Google Calendar event created: {task}", 
+                                  user_id=user_id, org_id=org_id, action="CALENDAR_EVENT_SUCCESS")
+                    else:
+                        log_event("reminder_service", f"Gagal membuat event di Google Calendar. HTTP {cal_res.status_code}: {cal_res.text}", 
+                                  user_id=user_id, org_id=org_id, action="CALENDAR_EVENT_FAILED")
+    except Exception as cal_err:
+        log_event("reminder_service", f"Error sewaktu memproses Google Calendar event: {str(cal_err)}", 
+                  user_id=user_id, org_id=org_id, action="CALENDAR_EVENT_ERROR")
+
     reminder = {
         "org_id": org_id,
         "created_by": user_id,
@@ -80,6 +146,7 @@ def create_reminder(current_user):
         "time": data.get('time', ''),
         "location": data.get('location', ''),
         "doc_id": data.get('doc_id', ''),
+        "google_calendar_event_id": calendar_event_id,
         "is_completed": False,
         "created_at": datetime.datetime.utcnow()
     }

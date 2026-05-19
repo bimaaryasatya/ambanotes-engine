@@ -11,10 +11,17 @@ from common.config import Config
 from common.logger import log_event
 from common.jwt_utils import token_required
 from common.db import docs_col, reminders_col
-def _call_mistral(prompt, system_instruction=None):
+def _call_mistral(prompt, system_instruction=None, history=None):
     messages = []
     if system_instruction:
         messages.append({"role": "system", "content": system_instruction})
+    
+    if history:
+        for msg in history:
+            role = "user" if msg.get("sender") == "user" else "assistant"
+            content = msg.get("content", "")
+            messages.append({"role": role, "content": content})
+
     messages.append({"role": "user", "content": prompt})
 
     response = requests.post(
@@ -151,9 +158,10 @@ def chat(current_user):
         data = request.get_json(force=True, silent=True) or {}
         user_message = data.get("message", "")
         context = data.get("context", "")
+        history = data.get("history", [])
 
         system_instruction = f"Anda adalah asisten cerdas AmbaNotes. Gunakan konteks dokumen berikut untuk menjawab: {context}" if context else "Anda adalah asisten cerdas AmbaNotes."
-        answer = _call_mistral(user_message, system_instruction=system_instruction)
+        answer = _call_mistral(user_message, system_instruction=system_instruction, history=history)
 
         log_event("ai_service", "Chat response generated",
                   user_id=user_id, org_id=org_id, action="AI_CHAT_SUCCESS")
@@ -252,7 +260,8 @@ def chat_global(current_user):
             "3. Jika jawaban melibatkan banyak dokumen, cantumkan semua ID yang relevan.\n\n"
             f"KONTEKS DOKUMEN:\n{global_context}"
         )
-        answer = _call_mistral(user_message, system_instruction=system_instruction)
+        history = data.get("history", [])
+        answer = _call_mistral(user_message, system_instruction=system_instruction, history=history)
 
         # Extract citations [[...]] using Regex
         citation_ids = re.findall(r"\[\[(.*?)\]\]", answer)
