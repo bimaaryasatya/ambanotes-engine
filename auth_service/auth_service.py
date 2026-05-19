@@ -33,11 +33,11 @@ def _validate_password(password: str) -> str | None:
     return None
 
 def _validate_username(username: str) -> str | None:
-    """Returns an error message if username is invalid, else None."""
-    if len(username) < 3 or len(username) > 30:
-        return "Username must be between 3 and 30 characters"
-    if not re.match(r"^[a-zA-Z0-9_]+$", username):
-        return "Username may only contain letters, numbers, and underscores"
+    """Returns an error message if username/full name is invalid, else None."""
+    if len(username) < 3 or len(username) > 50:
+        return "Nama lengkap harus antara 3 dan 50 karakter"
+    if not re.match(r"^[a-zA-Z0-9_ ]+$", username):
+        return "Nama lengkap hanya boleh mengandung huruf, angka, spasi, dan garis bawah"
     return None
 
 
@@ -119,21 +119,44 @@ def register():
         if not org_name:
             return jsonify({"error": "Organization name is required"}), 400
         
+        import random
+        import string
+        while True:
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            if not orgs_col.find_one({"invite_code": code}):
+                invite_code = code
+                break
+
         org_result = orgs_col.insert_one({
             "name": org_name,
+            "invite_code": invite_code,
             "created_at": datetime.datetime.utcnow()
         })
         org_id = str(org_result.inserted_id)
         role = 'owner'
     
     elif action == 'join_org':
-        invite = invitations_col.find_one({"email": email, "status": "pending"})
-        if not invite:
-            return jsonify({"error": "No pending invitation found"}), 400
-        
-        org_id = str(invite['org_id'])
-        role = invite.get('role', 'member')
-        invitations_col.update_one({"_id": invite["_id"]}, {"$set": {"status": "accepted", "accepted_at": datetime.datetime.utcnow()}})
+        invitation_code = data.get('invitation_code')
+        if invitation_code:
+            org = orgs_col.find_one({"invite_code": invitation_code.strip().upper()})
+            if not org:
+                try:
+                    org = orgs_col.find_one({"_id": ObjectId(invitation_code.strip())})
+                except Exception:
+                    org = None
+            if not org:
+                return jsonify({"error": "Invalid invite code"}), 400
+            
+            org_id = str(org['_id'])
+            role = 'member'
+        else:
+            invite = invitations_col.find_one({"email": email, "status": "pending"})
+            if not invite:
+                return jsonify({"error": "No pending invitation found or invite code not provided"}), 400
+            
+            org_id = str(invite['org_id'])
+            role = invite.get('role', 'member')
+            invitations_col.update_one({"_id": invite["_id"]}, {"$set": {"status": "accepted", "accepted_at": datetime.datetime.utcnow()}})
 
     hashed_password = generate_password_hash(password)
     user = {
@@ -264,6 +287,24 @@ def get_profile(current_user):
         "delegation_id": user.get('delegation_id'),
         "google_drive_connected": user.get('google_drive_connected', False)
     }
+    
+    if user.get('org_id'):
+        try:
+            org = orgs_col.find_one({"_id": ObjectId(user['org_id'])})
+            if org:
+                invite_code = org.get('invite_code')
+                if not invite_code:
+                    import random
+                    import string
+                    while True:
+                        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                        if not orgs_col.find_one({"invite_code": code}):
+                            invite_code = code
+                            break
+                    orgs_col.update_one({"_id": org["_id"]}, {"$set": {"invite_code": invite_code}})
+                user_data['invite_code'] = invite_code
+        except Exception as e:
+            print(f"Error fetching org invite code: {e}")
     
     if user.get('delegation_id'):
         try:
@@ -406,20 +447,35 @@ def change_delegation(current_user):
     target_user_id = data.get('target_user_id')
     new_del_id = data.get('new_delegation_id')
 
-    if not target_user_id or not new_del_id:
-        return jsonify({"error": "Missing IDs"}), 400
+    if not target_user_id:
+        return jsonify({"error": "Missing target user ID"}), 400
 
     try:
         target_user = users_col.find_one({"_id": ObjectId(target_user_id), "org_id": org_id})
+    except Exception:
+        return jsonify({"error": "Invalid user ID format"}), 400
+
+    if not target_user:
+        return jsonify({"error": "Invalid target user"}), 404
+
+    # If moving to general
+    if not new_del_id or new_del_id == "general":
+        users_col.update_one({"_id": ObjectId(target_user_id)}, {"$set": {"delegation_id": None}})
+        docs_col.update_many({"uploaded_by": target_user_id}, {"$set": {"delegation_id": None}})
+        docs_col.update_many({"uploaded_by": ObjectId(target_user_id)}, {"$set": {"delegation_id": None}})
+        return jsonify({"message": f"User {target_user['username']} moved to General"}), 200
+
+    try:
         new_delegation = delegations_col.find_one({"_id": ObjectId(new_del_id), "org_id": org_id})
     except Exception:
-        return jsonify({"error": "Invalid user ID or delegation ID format"}), 400
+        return jsonify({"error": "Invalid delegation ID format"}), 400
 
-    if not target_user or not new_delegation:
-        return jsonify({"error": "Invalid target user or delegation"}), 404
+    if not new_delegation:
+        return jsonify({"error": "Invalid delegation"}), 404
 
     users_col.update_one({"_id": ObjectId(target_user_id)}, {"$set": {"delegation_id": new_del_id}})
-    docs_col.update_many({"user_id": target_user_id}, {"$set": {"delegation_id": new_del_id}})
+    docs_col.update_many({"uploaded_by": target_user_id}, {"$set": {"delegation_id": new_del_id}})
+    docs_col.update_many({"uploaded_by": ObjectId(target_user_id)}, {"$set": {"delegation_id": new_del_id}})
 
     return jsonify({"message": f"User {target_user['username']} moved to {new_delegation['name']}"}), 200
 
@@ -472,14 +528,162 @@ def upload_asset(current_user):
     asset_type = data.get('type')
     delegation_id = data.get('delegation_id')
     image_data = data.get('image_data') 
+    name = data.get('name', 'Tanpa Nama').strip()
     org_id = current_user.get('org_id')
 
+    normalized_type = "letterhead" if asset_type in ['kop', 'letterhead'] else "signature" if asset_type in ['ttd', 'signature'] else asset_type
+
     assets_col.update_one(
-        {"type": asset_type, "delegation_id": delegation_id},
-        {"$set": {"type": asset_type, "delegation_id": delegation_id, "org_id": org_id, "image_data": image_data, "updated_at": datetime.datetime.utcnow()}},
+        {"type": normalized_type, "org_id": org_id, "name": name},
+        {"$set": {
+            "type": normalized_type,
+            "delegation_id": delegation_id if delegation_id else None,
+            "org_id": org_id,
+            "name": name,
+            "image_data": image_data,
+            "updated_at": datetime.datetime.utcnow()
+        }},
         upsert=True
     )
-    return jsonify({"message": f"Asset {asset_type} uploaded successfully"}), 201
+    return jsonify({"message": f"Asset {asset_type} ({name}) uploaded successfully"}), 201
+
+
+@auth_bp.route('/assets', methods=['GET'])
+@token_required
+def list_assets(current_user):
+    """
+    List All Assets (Kop & TTD) in Organization
+    """
+    org_id = current_user.get('org_id')
+    assets = list(assets_col.find({"org_id": org_id}))
+    asset_list = []
+    for a in assets:
+        asset_list.append({
+            "id": str(a['_id']),
+            "type": "kop" if a.get('type') == "letterhead" else "ttd" if a.get('type') == "signature" else a.get('type'),
+            "name": a.get('name', 'Tanpa Nama'),
+            "delegation_id": a.get('delegation_id'),
+            "image_data": a.get('image_data')
+        })
+    return jsonify(asset_list), 200
+
+
+@auth_bp.route('/delegations/<delegation_id>', methods=['PUT'])
+@token_required
+@role_required('owner')
+def update_delegation(current_user, delegation_id):
+    """
+    Update Delegation/Division Name (Owner Only)
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    name = data.get('name', '').strip()
+    org_id = current_user.get('org_id')
+
+    if not name:
+        return jsonify({"error": "Delegation name is required"}), 400
+
+    try:
+        result = delegations_col.update_one(
+            {"_id": ObjectId(delegation_id), "org_id": org_id},
+            {"$set": {"name": name}}
+        )
+        if result.matched_count == 0:
+            return jsonify({"error": "Delegation not found"}), 404
+            
+        log_event("auth_service", f"Delegation renamed to {name}", 
+                  user_id=current_user.get('user_id'), org_id=org_id, action="DELEGATION_RENAME")
+        return jsonify({"message": "Delegation name updated successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": "Invalid delegation ID format", "details": str(e)}), 400
+
+
+@auth_bp.route('/delegations/<delegation_id>', methods=['DELETE'])
+@token_required
+@role_required('owner')
+def delete_delegation(current_user, delegation_id):
+    """
+    Delete Delegation/Division (Owner Only)
+    """
+    org_id = current_user.get('org_id')
+    try:
+        delegation = delegations_col.find_one({"_id": ObjectId(delegation_id), "org_id": org_id})
+        if not delegation:
+            return jsonify({"error": "Delegation not found"}), 404
+            
+        # Update all users under this division to None
+        users_col.update_many({"delegation_id": delegation_id, "org_id": org_id}, {"$set": {"delegation_id": None}})
+        
+        # Update all documents under this division to None
+        docs_col.update_many({"delegation_id": delegation_id}, {"$set": {"delegation_id": None}})
+        docs_col.update_many({"delegation_id": ObjectId(delegation_id)}, {"$set": {"delegation_id": None}})
+        
+        # Finally delete the delegation itself
+        delegations_col.delete_one({"_id": ObjectId(delegation_id)})
+        
+        log_event("auth_service", f"Delegation {delegation.get('name')} deleted", 
+                  user_id=current_user.get('user_id'), org_id=org_id, action="DELEGATION_DELETE")
+        return jsonify({"message": "Delegation deleted successfully and members migrated to general"}), 200
+    except Exception as e:
+        return jsonify({"error": "Invalid delegation ID format", "details": str(e)}), 400
+
+
+@auth_bp.route('/members', methods=['GET'])
+@token_required
+def list_members(current_user):
+    """
+    List All Members in Organization
+    ---
+    tags:
+      - Enterprise
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
+    responses:
+      200:
+        description: List of organization members
+      401:
+        description: Unauthorized
+    """
+    org_id = current_user.get('org_id')
+    if not org_id:
+        return jsonify([]), 200
+
+    try:
+        users = list(users_col.find({"org_id": org_id}))
+        member_list = []
+        for u in users:
+            # Look up delegation name if delegation_id exists
+            delegation_name = None
+            del_id = u.get('delegation_id')
+            if del_id:
+                try:
+                    delegation = delegations_col.find_one({"_id": ObjectId(del_id)})
+                    if delegation:
+                        delegation_name = delegation.get('name')
+                except Exception:
+                    pass
+
+            member_list.append({
+                "id": str(u['_id']),
+                "username": u['username'],
+                "email": u['email'],
+                "role": u.get('role', 'member'),
+                "delegation_id": del_id,
+                "delegation_name": delegation_name
+            })
+        return jsonify(member_list), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to retrieve members: {str(e)}"}), 500
 
 
 @auth_bp.route('/invite', methods=['POST'])
@@ -834,7 +1038,7 @@ def google_connect(current_user):
     user_id = current_user.get("user_id")
     client_id = Config.GOOGLE_CLIENT_ID
     redirect_uri = urllib.parse.quote(Config.GOOGLE_REDIRECT_URI)
-    scope = urllib.parse.quote("https://www.googleapis.com/auth/drive.file")
+    scope = urllib.parse.quote("https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar")
     
     # State berisi user_id agar saat callback kita tahu siapa yang melakukan otorisasi
     auth_url = (

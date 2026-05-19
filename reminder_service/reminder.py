@@ -74,8 +74,8 @@ def create_reminder(current_user):
     if not task or not date:
         return jsonify({"error": "Task and Date are required"}), 400
 
-    # 1. Hubungkan ke Google Calendar jika Google terhubung
     calendar_event_id = None
+    google_calendar_success = True
     try:
         user_data = users_col.find_one({"_id": ObjectId(user_id)})
         google_drive_connected = user_data.get("google_drive_connected", False) if user_data else False
@@ -132,9 +132,15 @@ def create_reminder(current_user):
                         log_event("reminder_service", f"Google Calendar event created: {task}", 
                                   user_id=user_id, org_id=org_id, action="CALENDAR_EVENT_SUCCESS")
                     else:
+                        google_calendar_success = False
                         log_event("reminder_service", f"Gagal membuat event di Google Calendar. HTTP {cal_res.status_code}: {cal_res.text}", 
                                   user_id=user_id, org_id=org_id, action="CALENDAR_EVENT_FAILED")
+                else:
+                    google_calendar_success = False
+            else:
+                google_calendar_success = False
     except Exception as cal_err:
+        google_calendar_success = False
         log_event("reminder_service", f"Error sewaktu memproses Google Calendar event: {str(cal_err)}", 
                   user_id=user_id, org_id=org_id, action="CALENDAR_EVENT_ERROR")
 
@@ -147,6 +153,7 @@ def create_reminder(current_user):
         "location": data.get('location', ''),
         "doc_id": data.get('doc_id', ''),
         "google_calendar_event_id": calendar_event_id,
+        "google_calendar_success": google_calendar_success,
         "is_completed": False,
         "created_at": datetime.datetime.utcnow()
     }

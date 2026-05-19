@@ -9,7 +9,7 @@ from common.logger import log_event
 from common.jwt_utils import token_required, role_required
 
 import requests
-from common.db import docs_col, users_col
+from common.db import docs_col, users_col, delegations_col
 from bson.objectid import ObjectId
 import uuid
 import datetime
@@ -231,38 +231,127 @@ def upload_document(current_user):
 @token_required
 def list_documents(current_user):
     """
-    List all processed documents (filtered by organization)
-    ---
-    tags:
-      - Document
-    consumes:
-      - application/json
-    produces:
-      - application/json
-    security:
-      - BearerAuth: []
-    parameters:
-      - name: Authorization
-        in: header
-        type: string
-        required: true
-        description: "Format: Bearer <token>"
-        default: "Bearer "
-    responses:
-      200:
-        description: List of documents belonging to the user's organization
-      401:
-        description: Unauthorized
+    List all processed documents (filtered by organization and delegation for members)
     """
     org_id = current_user.get("org_id")
-    docs = list(docs_col.find({"org_id": org_id}))
+    role = current_user.get("role", "member")
+    user_id = current_user.get("user_id")
+
+    print(f"[DEBUG LIST_DOCS] --- INCOMING REQUEST ---")
+    print(f"[DEBUG LIST_DOCS] User ID (JWT): {user_id}")
+    print(f"[DEBUG LIST_DOCS] Role (JWT): {role}")
+    print(f"[DEBUG LIST_DOCS] Org ID (JWT): {org_id}")
+
+    # For safety/reliability, always fetch latest user status from DB
+    user = None
+    if user_id:
+        try:
+            user = users_col.find_one({"_id": ObjectId(user_id)})
+        except Exception as e:
+            print(f"[DEBUG LIST_DOCS] ObjectId parse error for user_id {user_id}: {e}")
+        if not user:
+            user = users_col.find_one({"_id": user_id})
+
+    delegation_id = None
+    if user:
+        delegation_id = user.get("delegation_id")
+        print(f"[DEBUG LIST_DOCS] Found user in DB: {user.get('username')}, delegation_id: {delegation_id}")
+    else:
+        print(f"[DEBUG LIST_DOCS] WARNING: User not found in DB for user_id: {user_id}")
+
+    if role == 'owner':
+        docs = list(docs_col.find({"org_id": org_id}))
+        print(f"[DEBUG LIST_DOCS] Owner request. Found {len(docs)} documents for org_id: {org_id}")
+    else:
+        # A member is general if delegation_id is None, "", or "general"
+        is_general = (delegation_id is None or delegation_id == "" or delegation_id == "general")
+        if is_general:
+            query = {
+                "org_id": org_id,
+                "delegation_id": "general"
+            }
+            docs = list(docs_col.find(query))
+            print(f"[DEBUG LIST_DOCS] Member is in General division. Found {len(docs)} general documents.")
+        else:
+            query = {
+                "org_id": org_id,
+                "$or": [
+                    {"delegation_id": delegation_id},
+                    {"delegation_id": str(delegation_id)}
+                ]
+            }
+            docs = list(docs_col.find(query))
+            
+            # Print delegation name for debug visibility
+            try:
+                del_obj = delegations_col.find_one({"_id": ObjectId(delegation_id)})
+            except Exception:
+                del_obj = delegations_col.find_one({"_id": delegation_id})
+            del_name = del_obj.get("name") if del_obj else "Unknown"
+            
+            print(f"[DEBUG LIST_DOCS] Member request for division '{del_name}' (ID: {delegation_id}). Found {len(docs)} documents.")
+            
+            for d in docs:
+                print(f"  -> Doc ID: {d.get('doc_id')}, Title: '{d.get('title')}', delegation_id: {d.get('delegation_id')}")
+
     for doc in docs:
         doc.pop('_id', None)
         
-    log_event("document_service", f"Listed docs for org: {org_id}", 
-              user_id=current_user.get("user_id"), org_id=org_id, action="DOC_LIST_VIEW")
+    log_event("document_service", f"Listed docs for org: {org_id}, role: {role}", 
+              user_id=user_id, org_id=org_id, action="DOC_LIST_VIEW")
               
     return jsonify(docs), 200
+
+
+@document_bp.route('/disposition/<doc_id>', methods=['POST'])
+@token_required
+@role_required('owner')
+def disposition_document(current_user, doc_id):
+    """
+    Disposisi surat ke delegasi tertentu (Owner Only)
+    """
+    org_id = current_user.get("org_id")
+    data = request.get_json(force=True, silent=True) or {}
+    delegation_id = data.get("delegation_id")
+
+    if not delegation_id:
+        return jsonify({"error": "Delegation ID is required"}), 400
+
+    try:
+        # Check if disposition target is general
+        if delegation_id == 'general':
+            result = docs_col.update_one(
+                {"doc_id": doc_id, "org_id": org_id},
+                {"$set": {"delegation_id": "general"}}
+            )
+            if result.matched_count == 0:
+                return jsonify({"error": "Document not found"}), 404
+            log_event("document_service", f"Document {doc_id} dispositioned to general",
+                      user_id=current_user.get("user_id"), org_id=org_id, action="DOC_DISPOSITION_SUCCESS")
+            return jsonify({"message": "Document successfully dispositioned to General"}), 200
+
+        # Verify delegation exists in this organization
+        delegation = delegations_col.find_one({"_id": ObjectId(delegation_id), "org_id": org_id})
+        if not delegation:
+            # Try lookup without ObjectId just in case
+            delegation = delegations_col.find_one({"_id": delegation_id, "org_id": org_id})
+        if not delegation:
+            return jsonify({"error": "Delegation not found in this organization"}), 404
+
+        result = docs_col.update_one(
+            {"doc_id": doc_id, "org_id": org_id},
+            {"$set": {"delegation_id": delegation_id}}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({"error": "Document not found"}), 404
+
+        log_event("document_service", f"Document {doc_id} dispositioned to delegation {delegation['name']}",
+                  user_id=current_user.get("user_id"), org_id=org_id, action="DOC_DISPOSITION_SUCCESS")
+        return jsonify({"message": f"Document successfully dispositioned to {delegation['name']}"}), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to disposition document: {str(e)}"}), 500
 
 
 @document_bp.route('/<doc_id>', methods=['DELETE'])

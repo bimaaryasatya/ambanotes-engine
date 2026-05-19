@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Blueprint, request, jsonify, render_template_string
 from common.logger import log_event
 from common.jwt_utils import token_required
-from common.db import users_col, delegations_col, assets_col, docs_col
+from common.db import users_col, delegations_col, assets_col, docs_col, orgs_col
 import hashlib
 
 generator_bp = Blueprint('generator', __name__)
@@ -113,74 +113,141 @@ def generate_surat_tugas(current_user):
       200:
         description: Generated HTML string
     """
-    user_id = current_user.get('user_id')
-    org_id = current_user.get('org_id')
-    
-    data = request.get_json(force=True, silent=True) or {}
-    doc_number = data.get('doc_number')
-    task_description = data.get('task_description')
-    signatory_name = data.get('signatory_name')
-    city = data.get('city', 'Jakarta')
-    
-    if not doc_number or not task_description or not signatory_name:
-        return jsonify({"error": "Missing required fields"}), 400
+    try:
+        user_id = current_user.get('user_id')
+        org_id = current_user.get('org_id')
+        
+        data = request.get_json(force=True, silent=True) or {}
+        
+        # 1. Fetch User and Delegation/Organization name
+        user = users_col.find_one({"_id": ObjectId(user_id)})
+        delegation_id = user.get('delegation_id') if user else None
+        
+        org = orgs_col.find_one({"_id": ObjectId(org_id)}) if org_id else None
+        org_name = org.get('name') if org else "Personal Workspace"
+        
+        delegation_name = org_name
+        if delegation_id:
+            try:
+                delegation = delegations_col.find_one({"_id": ObjectId(delegation_id)})
+                if delegation:
+                    delegation_name = delegation.get('name')
+            except Exception:
+                pass
 
-    # 1. Fetch User and Delegation
-    user = users_col.find_one({"_id": ObjectId(user_id)})
-    delegation_id = user.get('delegation_id')
-    
-    if not delegation_id:
-        return jsonify({"error": "User does not have an assigned delegation"}), 403
-    
-    delegation = delegations_col.find_one({"_id": ObjectId(delegation_id)})
-    delegation_name = delegation.get('name') if delegation else "Unknown Unit"
+        doc_number = data.get('doc_number') or data.get('letter_number')
+        signatory_name = data.get('signatory_name') or (user.get('username') if user else 'Kepala Instansi')
+        
+        task_description = data.get('task_description')
+        if not task_description:
+            ref_doc_id = data.get('reference_doc_id')
+            ref_title = "Undangan"
+            if ref_doc_id:
+                ref_doc = docs_col.find_one({"doc_id": ref_doc_id})
+                if not ref_doc:
+                    try:
+                        ref_doc = docs_col.find_one({"_id": ObjectId(ref_doc_id)})
+                    except Exception:
+                        pass
+                if ref_doc:
+                    entities = ref_doc.get('entities', {})
+                    ref_title = entities.get('perihal') or entities.get('subject') or ref_doc.get('filename', 'Undangan')
+            
+            date_str = data.get('date', datetime.date.today().strftime("%d %B %Y"))
+            time_str = data.get('time', '09:00 WIB')
+            location_str = data.get('location', 'Kantor Pusat')
+            task_description = f"Menghadiri dan berpartisipasi aktif dalam kegiatan '{ref_title}' yang diselenggarakan pada tanggal {date_str} pukul {time_str} berlokasi di {location_str}."
 
-    # 2. Fetch Assets (Kop & TTD)
-    letterhead_asset = assets_col.find_one({"type": "letterhead", "delegation_id": delegation_id})
-    signature_asset = assets_col.find_one({"type": "signature", "delegation_id": delegation_id})
-    
-    letterhead_url = letterhead_asset.get('image_data') if letterhead_asset else None
-    signature_url = signature_asset.get('image_data') if signature_asset else None
+        city = data.get('city', 'Jakarta')
+        
+        if not doc_number or not task_description or not signatory_name:
+            return jsonify({"error": "Missing required fields (doc_number/letter_number, task_description, signatory_name)"}), 400
 
-    # 3. Render HTML
-    html_content = render_template_string(
-        SURAT_TUGAS_TEMPLATE,
-        doc_number=doc_number,
-        task_description=task_description,
-        signatory_name=signatory_name,
-        delegation_name=delegation_name,
-        letterhead=letterhead_url,
-        signature=signature_url,
-        city=city,
-        current_date=datetime.date.today().strftime("%d %B %Y")
-    )
+        # 2. Fetch Assets (Kop & TTD) by name or fallback
+        kop_name = data.get('kop')
+        ttd_name = data.get('ttd')
+        
+        letterhead_asset = None
+        if kop_name:
+            letterhead_asset = assets_col.find_one({"type": "letterhead", "org_id": org_id, "name": kop_name})
+            
+        if not letterhead_asset:
+            if delegation_id:
+                try:
+                    letterhead_asset = assets_col.find_one({"type": "letterhead", "delegation_id": delegation_id})
+                except Exception:
+                    pass
+            if not letterhead_asset:
+                letterhead_asset = assets_col.find_one({"type": "letterhead", "org_id": org_id})
 
-    # 4. Generate Unique Hash for Anti-Fraud
-    doc_hash = hashlib.sha256(f"{user_id}{datetime.datetime.utcnow().timestamp()}".encode()).hexdigest()[:16]
-    
-    # Store reference in docs_col (or a dedicated collection)
-    docs_col.update_one(
-        {"doc_id": doc_number}, # Using doc_number as a unique ref here
-        {"$set": {
-            "doc_id": doc_number,
-            "filename": f"SURAT_TUGAS_{doc_number}.pdf",
-            "content": task_description,
-            "org_id": org_id,
+        signature_asset = None
+        if ttd_name:
+            signature_asset = assets_col.find_one({"type": "signature", "org_id": org_id, "name": ttd_name})
+            
+        if not signature_asset:
+            if delegation_id:
+                try:
+                    signature_asset = assets_col.find_one({"type": "signature", "delegation_id": delegation_id})
+                except Exception:
+                    pass
+            if not signature_asset:
+                signature_asset = assets_col.find_one({"type": "signature", "org_id": org_id})
+        
+        letterhead_url = letterhead_asset.get('image_data') if letterhead_asset else None
+        signature_url = signature_asset.get('image_data') if signature_asset else None
+
+        # 3. Render HTML
+        html_content = render_template_string(
+            SURAT_TUGAS_TEMPLATE,
+            doc_number=doc_number,
+            task_description=task_description,
+            signatory_name=signatory_name,
+            delegation_name=delegation_name,
+            org_name=org_name,
+            letterhead=letterhead_url,
+            signature=signature_url,
+            city=city,
+            current_date=datetime.date.today().strftime("%d %B %Y")
+        )
+
+        # 4. Generate Unique Hash for Anti-Fraud
+        doc_hash = hashlib.sha256(f"{user_id}{datetime.datetime.utcnow().timestamp()}".encode()).hexdigest()[:16]
+        
+        # Store reference in docs_col (or a dedicated collection)
+        docs_col.update_one(
+            {"doc_id": doc_number}, # Using doc_number as a unique ref here
+            {"$set": {
+                "doc_id": doc_number,
+                "filename": f"SURAT_TUGAS_{doc_number}.pdf",
+                "content": task_description,
+                "org_id": org_id,
+                "verification_hash": doc_hash,
+                "is_generated": True,
+                "created_at": datetime.datetime.utcnow()
+            }},
+            upsert=True
+        )
+
+        log_event("generator_service", f"Surat Tugas generated for {delegation_name}", 
+                  user_id=user_id, org_id=org_id, action="GENERATE_SURAT_TUGAS", metadata={"hash": doc_hash})
+
+        return jsonify({
+            "html": html_content,
             "verification_hash": doc_hash,
-            "is_generated": True,
-            "created_at": datetime.datetime.utcnow()
-        }},
-        upsert=True
-    )
-
-    log_event("generator_service", f"Surat Tugas generated for {delegation_name}", 
-              user_id=user_id, org_id=org_id, action="GENERATE_SURAT_TUGAS", metadata={"hash": doc_hash})
-
-    return jsonify({
-        "html": html_content,
-        "verification_hash": doc_hash,
-        "message": "HTML template generated successfully. Use the hash to verify authenticity."
-    }), 200
+            "message": "HTML template generated successfully. Use the hash to verify authenticity."
+        }), 200
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        log_event("generator_service", f"Error generating Surat Tugas: {str(e)}", 
+                  user_id=current_user.get('user_id'), org_id=current_user.get('org_id'), 
+                  action="GENERATE_SURAT_TUGAS_ERROR", metadata={"error": error_details})
+        print(f"DEBUG ERROR in generate_surat_tugas:\n{error_details}")
+        return jsonify({
+            "error": "Internal Server Error during Surat Tugas generation",
+            "details": str(e),
+            "traceback": error_details
+        }), 500
 
 
 @generator_bp.route('/verify/<doc_hash>', methods=['GET'])
