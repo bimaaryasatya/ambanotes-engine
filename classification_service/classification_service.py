@@ -1,5 +1,6 @@
 import os
 import sys
+import requests
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -8,13 +9,8 @@ from common.logger import log_event
 from common.jwt_utils import token_required
 from common.config import Config
 from transformers import pipeline, AutoModelForSequenceClassification, AutoTokenizer
-import google.generativeai as genai
 
 classification_bp = Blueprint('classification', __name__)
-
-# Configure Gemini
-genai.configure(api_key=Config.GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel('gemini-2.5-flash')
 
 LABEL_MAPPING = {
     "LABEL_0": "Surat Undangan",
@@ -40,8 +36,8 @@ except Exception as e:
     classifier = None
 
 
-def _predict_gemini(text):
-    """Classification helper using Gemini API."""
+def _predict_mistral(text):
+    """Classification helper using Mistral API."""
     prompt = f"""
     Klasifikasikan teks surat berikut ke dalam salah satu kategori berikut:
     - Surat Undangan
@@ -55,24 +51,34 @@ def _predict_gemini(text):
     Teks Surat:
     {text}
     """
-    response = gemini_model.generate_content(prompt)
-    category = response.text.strip()
+    response = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
+        json={
+            "model": "mistral-small",
+            "messages": [{"role": "user", "content": prompt}]
+        },
+        timeout=30
+    )
+    response.raise_for_status()
+    category = response.json()['choices'][0]['message']['content'].strip()
+    category = category.replace('"', '').replace("'", "").strip()
     
     # Validation and mapping
     if category not in LABEL_MAPPING.values():
-        # Fallback if Gemini gives something else
+        # Fallback if Mistral gives something else
         return {
             "label": "LABEL_0",
             "label_name": "Surat Undangan",
             "score": 0.5,
-            "provider": "gemini"
+            "provider": "mistral"
         }
     
     return {
         "label": REVERSE_LABEL_MAPPING.get(category),
         "label_name": category,
         "score": 1.0,
-        "provider": "gemini"
+        "provider": "mistral"
     }
 
 
@@ -135,15 +141,15 @@ def predict(current_user):
         return jsonify({"error": "No text provided"}), 400
 
     try:
-        if model_type == 'gemini':
-            result = _predict_gemini(text)
+        if model_type in ['gemini', 'mistral']:
+            result = _predict_mistral(text)
         else:
             # Default menggunakan model lokal
             if classifier is None:
-                # Otorun Fallback Otomatis ke Gemini Online jika model lokal dihapus/tidak terdeteksi
-                log_event("classification_service", "Model lokal tidak ditemukan/gagal dimuat. Mengalihkan otomatis ke Gemini Online.",
-                          user_id=user_id, org_id=org_id, action="CLASS_AUTO_FALLBACK_GEMINI")
-                result = _predict_gemini(text)
+                # Otorun Fallback Otomatis ke Mistral Online jika model lokal dihapus/tidak terdeteksi
+                log_event("classification_service", "Model lokal tidak ditemukan/gagal dimuat. Mengalihkan otomatis ke Mistral Online.",
+                          user_id=user_id, org_id=org_id, action="CLASS_AUTO_FALLBACK_MISTRAL")
+                result = _predict_mistral(text)
             else:
                 try:
                     raw_result = classifier(text)[0]
@@ -156,9 +162,9 @@ def predict(current_user):
                     }
                 except Exception as local_err:
                     # Fallback jika model ada tapi terjadi error sewaktu eksekusi
-                    log_event("classification_service", f"Klasifikasi lokal gagal ({str(local_err)}). Mengalihkan otomatis ke Gemini.",
-                              user_id=user_id, org_id=org_id, action="CLASS_AUTO_FALLBACK_GEMINI")
-                    result = _predict_gemini(text)
+                    log_event("classification_service", f"Klasifikasi lokal gagal ({str(local_err)}). Mengalihkan otomatis ke Mistral.",
+                              user_id=user_id, org_id=org_id, action="CLASS_AUTO_FALLBACK_MISTRAL")
+                    result = _predict_mistral(text)
         
         log_event("classification_service", f"Prediction successful ({result['provider']}): {result['label_name']}",
                   user_id=user_id, org_id=org_id, action="CLASS_PREDICT_SUCCESS", metadata={"result": result})

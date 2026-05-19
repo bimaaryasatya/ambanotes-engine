@@ -11,18 +11,23 @@ from common.config import Config
 from common.logger import log_event
 from common.jwt_utils import token_required
 from common.db import docs_col, reminders_col
-import google.generativeai as genai
+def _call_mistral(prompt, system_instruction=None):
+    messages = []
+    if system_instruction:
+        messages.append({"role": "system", "content": system_instruction})
+    messages.append({"role": "user", "content": prompt})
 
-# Konfigurasi Gemini API
-genai.configure(api_key=Config.GEMINI_API_KEY)
-
-def _call_gemini(prompt, system_instruction=None):
-    model = genai.GenerativeModel(
-        model_name='gemini-2.5-flash',
-        system_instruction=system_instruction
+    response = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
+        json={
+            "model": "mistral-small",
+            "messages": messages
+        },
+        timeout=30
     )
-    response = model.generate_content(prompt)
-    return response.text
+    response.raise_for_status()
+    return response.json()['choices'][0]['message']['content']
 
 ai_bp = Blueprint('ai', __name__)
 
@@ -82,7 +87,7 @@ def summarize(current_user):
             return jsonify({"error": "No text provided"}), 400
 
         prompt = f"Tolong buatkan ringkasan singkat dan padat dari teks dokumen berikut ini:\n\n{text}"
-        summary = _call_gemini(prompt)
+        summary = _call_mistral(prompt)
 
         log_event("ai_service", "Summary generated successfully",
                   user_id=user_id, org_id=org_id, action="AI_SUMMARIZE_SUCCESS")
@@ -148,7 +153,7 @@ def chat(current_user):
         context = data.get("context", "")
 
         system_instruction = f"Anda adalah asisten cerdas AmbaNotes. Gunakan konteks dokumen berikut untuk menjawab: {context}" if context else "Anda adalah asisten cerdas AmbaNotes."
-        answer = _call_gemini(user_message, system_instruction=system_instruction)
+        answer = _call_mistral(user_message, system_instruction=system_instruction)
 
         log_event("ai_service", "Chat response generated",
                   user_id=user_id, org_id=org_id, action="AI_CHAT_SUCCESS")
@@ -247,7 +252,7 @@ def chat_global(current_user):
             "3. Jika jawaban melibatkan banyak dokumen, cantumkan semua ID yang relevan.\n\n"
             f"KONTEKS DOKUMEN:\n{global_context}"
         )
-        answer = _call_gemini(user_message, system_instruction=system_instruction)
+        answer = _call_mistral(user_message, system_instruction=system_instruction)
 
         # Extract citations [[...]] using Regex
         citation_ids = re.findall(r"\[\[(.*?)\]\]", answer)
@@ -515,7 +520,7 @@ def translate_text(current_user):
             f"Teks: {text}"
         )
 
-        translated = _call_gemini(prompt)
+        translated = _call_mistral(prompt)
 
         log_event("ai_service", "Translation successful", user_id=user_id, org_id=org_id, action="AI_TRANSLATE_SUCCESS")
         return jsonify({"translated_text": translated}), 200
@@ -674,7 +679,7 @@ def redact_sensitive(current_user):
             f"Teks:\n{text}"
         )
 
-        redacted = _call_gemini(prompt)
+        redacted = _call_mistral(prompt)
 
         log_event("ai_service", "Sensitive data redacted", user_id=user_id, org_id=org_id, action="AI_REDACT_SUCCESS")
         return jsonify({"redacted_text": redacted}), 200
@@ -932,7 +937,7 @@ def analyze_workflow(current_user):
             "}"
         )
 
-        content = _call_gemini(prompt)
+        content = _call_mistral(prompt)
         json_match = re.search(r"\{.*\}", content, re.DOTALL)
         analysis = json.loads(json_match.group()) if json_match else {"error": "Analysis failed"}
 
@@ -1072,7 +1077,7 @@ def analyze_priority(current_user):
             f"Teks:\n{text}"
         )
 
-        content = _call_gemini(prompt)
+        content = _call_mistral(prompt)
         json_match = re.search(r"\{.*\}", content, re.DOTALL)
         analysis = json.loads(json_match.group()) if json_match else {"error": "Analysis failed"}
 

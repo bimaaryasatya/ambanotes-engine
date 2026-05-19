@@ -13,18 +13,23 @@ from common.logger import log_event
 from common.jwt_utils import token_required
 from common.db import docs_col, reminders_col, invitations_col
 from common.config import Config
-import google.generativeai as genai
+def _call_mistral(prompt, system_instruction=None):
+    messages = []
+    if system_instruction:
+        messages.append({"role": "system", "content": system_instruction})
+    messages.append({"role": "user", "content": prompt})
 
-# Konfigurasi Gemini API
-genai.configure(api_key=Config.GEMINI_API_KEY)
-
-def _call_gemini(prompt, system_instruction=None):
-    model = genai.GenerativeModel(
-        model_name='gemini-2.5-flash',
-        system_instruction=system_instruction
+    response = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
+        json={
+            "model": "mistral-small",
+            "messages": messages
+        },
+        timeout=30
     )
-    response = model.generate_content(prompt)
-    return response.text
+    response.raise_for_status()
+    return response.json()['choices'][0]['message']['content']
 
 insight_bp = Blueprint('insight', __name__)
 
@@ -116,7 +121,7 @@ def weekly_summary(current_user):
         )
         
         try:
-            summary = _call_gemini(prompt)
+            summary = _call_mistral(prompt)
         except Exception as gemini_err:
             import traceback
             traceback.print_exc()
@@ -192,7 +197,7 @@ def predictive_trends(current_user):
     )
 
     try:
-        content = _call_gemini(prompt)
+        content = _call_mistral(prompt)
         predictions_data = json.loads(re.search(r"\{.*\}", content, re.DOTALL).group())
         predictions = predictions_data.get("predictions", [])
         recommendation = predictions_data.get("recommendation", "")
