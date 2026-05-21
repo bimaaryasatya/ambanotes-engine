@@ -7,10 +7,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Blueprint, request, jsonify
 import requests
+from datetime import datetime
 from common.config import Config
 from common.logger import log_event
 from common.jwt_utils import token_required
-from common.db import docs_col, reminders_col
+from common.db import docs_col, reminders_col, chats_col
 def _call_mistral(prompt, system_instruction=None, history=None):
     messages = []
     if system_instruction:
@@ -141,6 +142,14 @@ def chat(current_user):
             context:
               type: string
               example: "Isi teks surat sebagai konteks..."
+            doc_id:
+              type: string
+              example: "doc-uuid-here"
+            history:
+              type: array
+              items:
+                type: object
+              example: [{"sender": "user", "content": "hello"}]
     responses:
       200:
         description: Chat response generated
@@ -158,19 +167,141 @@ def chat(current_user):
         data = request.get_json(force=True, silent=True) or {}
         user_message = data.get("message", "")
         context = data.get("context", "")
-        history = data.get("history", [])
+        history = data.get("history", []) or []
+        doc_id = data.get("doc_id")
+
+        if doc_id and not history:
+            existing_chat = chats_col.find_one({"user_id": user_id, "doc_id": doc_id})
+            if existing_chat:
+                history = existing_chat.get("chat_json", [])
 
         system_instruction = f"Anda adalah asisten cerdas AmbaNotes. Gunakan konteks dokumen berikut untuk menjawab: {context}" if context else "Anda adalah asisten cerdas AmbaNotes."
         answer = _call_mistral(user_message, system_instruction=system_instruction, history=history)
 
+        updated_history = list(history) + [
+            {"sender": "user", "content": user_message},
+            {"sender": "assistant", "content": answer}
+        ]
+
+        if doc_id:
+            chats_col.update_one(
+                {"user_id": user_id, "doc_id": doc_id},
+                {"$set": {
+                    "chat_json": updated_history,
+                    "updated_at": datetime.utcnow()
+                }},
+                upsert=True
+            )
+
         log_event("ai_service", "Chat response generated",
                   user_id=user_id, org_id=org_id, action="AI_CHAT_SUCCESS")
-        return jsonify({"answer": answer}), 200
+        return jsonify({"answer": answer, "history": updated_history}), 200
 
     except Exception as e:
         log_event("ai_service", f"Chat error: {str(e)}",
                   user_id=user_id, org_id=org_id, action="AI_CHAT_FAILED", metadata={"error": str(e)})
         return jsonify({"error": str(e)}), 500
+
+
+@ai_bp.route("/chats", methods=["GET"])
+@token_required
+def list_chats(current_user):
+    """
+    List Chat Histories for the User
+    ---
+    tags:
+      - AI
+    produces:
+      - application/json
+    security:
+      - BearerAuth: []
+    responses:
+      200:
+        description: List of user chat sessions
+      401:
+        description: Unauthorized
+      500:
+        description: Database or processing error
+    """
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+    log_event("ai_service", f"List chats request from: {current_user.get('username')}",
+              user_id=user_id, org_id=org_id, action="AI_LIST_CHATS_START")
+    try:
+        chats = list(chats_col.find({"user_id": user_id}).sort("updated_at", -1))
+        result = []
+        for chat in chats:
+            doc_id = chat.get("doc_id")
+            filename = "Unknown Document"
+            if doc_id:
+                doc = docs_col.find_one({"doc_id": doc_id})
+                if doc:
+                    filename = doc.get("filename", filename)
+            result.append({
+                "doc_id": doc_id,
+                "filename": filename,
+                "chat_json": chat.get("chat_json", []),
+                "updated_at": chat.get("updated_at").isoformat() if chat.get("updated_at") else None
+            })
+        log_event("ai_service", "List chats success", user_id=user_id, org_id=org_id, action="AI_LIST_CHATS_SUCCESS")
+        return jsonify(result), 200
+    except Exception as e:
+        log_event("ai_service", f"List chats error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_LIST_CHATS_FAILED")
+        return jsonify({"error": str(e)}), 500
+
+
+@ai_bp.route("/chat/<doc_id>", methods=["GET"])
+@token_required
+def get_chat_detail(current_user, doc_id):
+    """
+    Get Chat History for a Specific Document
+    ---
+    tags:
+      - AI
+    produces:
+      - application/json
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: doc_id
+        in: path
+        type: string
+        required: true
+        description: "The document ID of the chat"
+    responses:
+      200:
+        description: Chat history retrieved successfully
+      401:
+        description: Unauthorized
+      500:
+        description: Database or processing error
+    """
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+    log_event("ai_service", f"Get chat detail request for doc_id: {doc_id} from: {current_user.get('username')}",
+              user_id=user_id, org_id=org_id, action="AI_GET_CHAT_DETAIL_START")
+    try:
+        chat = chats_col.find_one({"user_id": user_id, "doc_id": doc_id})
+        if not chat:
+            return jsonify({"chat_json": [], "message": "No chat history found for this document"}), 200
+
+        filename = "Unknown Document"
+        doc = docs_col.find_one({"doc_id": doc_id})
+        if doc:
+            filename = doc.get("filename", filename)
+
+        result = {
+            "doc_id": doc_id,
+            "filename": filename,
+            "chat_json": chat.get("chat_json", []),
+            "updated_at": chat.get("updated_at").isoformat() if chat.get("updated_at") else None
+        }
+        log_event("ai_service", "Get chat detail success", user_id=user_id, org_id=org_id, action="AI_GET_CHAT_DETAIL_SUCCESS")
+        return jsonify(result), 200
+    except Exception as e:
+        log_event("ai_service", f"Get chat detail error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_GET_CHAT_DETAIL_FAILED")
+        return jsonify({"error": str(e)}), 500
+
 
 
 @ai_bp.route("/chat-global", methods=["POST"])
