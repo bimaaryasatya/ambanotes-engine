@@ -300,7 +300,7 @@ def get_chat_detail(current_user, doc_id):
         return jsonify(result), 200
     except Exception as e:
         log_event("ai_service", f"Get chat detail error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_GET_CHAT_DETAIL_FAILED")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 
