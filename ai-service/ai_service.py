@@ -22,7 +22,7 @@ def process():
         "https://api.mistral.ai/v1/chat/completions",
         headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
         json={
-            "model": "mistral-small",
+            "model": "mistral-large-latest",
             "messages": [{"role": "user", "content": prompt}]
         }
     )

@@ -24,6 +24,10 @@ from generator_service.generator import generator_bp
 app = Flask(__name__)
 CORS(app)
 
+# Configuration for Named Entity Recognition mode
+app.config['NER_DEFAULT_MODE'] = 'mistral'  # Options: 'local' (IndoBERT) or 'mistral'
+
+
 # Configure Swagger
 swagger_config = {
     "headers": [],
