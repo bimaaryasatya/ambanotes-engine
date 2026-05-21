@@ -247,7 +247,7 @@ def list_chats(current_user):
         return jsonify(result), 200
     except Exception as e:
         log_event("ai_service", f"List chats error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_LIST_CHATS_FAILED")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An internal error has occurred."}), 500
 
 
 @ai_bp.route("/chat/<doc_id>", methods=["GET"])
