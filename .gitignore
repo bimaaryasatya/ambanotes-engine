@@ -26,3 +26,9 @@ models/
 # Logs
 *.log
 logs/
+
+*.docx
+*.txt
+*.pptx
+*.pdf
+*.png
