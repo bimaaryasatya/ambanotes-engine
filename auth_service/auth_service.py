@@ -535,14 +535,19 @@ def upload_asset(current_user):
 
     assets_col.update_one(
         {"type": normalized_type, "org_id": org_id, "name": name},
-        {"$set": {
-            "type": normalized_type,
-            "delegation_id": delegation_id if delegation_id else None,
-            "org_id": org_id,
-            "name": name,
-            "image_data": image_data,
-            "updated_at": datetime.datetime.utcnow()
-        }},
+        {
+            "$set": {
+                "type": normalized_type,
+                "delegation_id": delegation_id if delegation_id else None,
+                "org_id": org_id,
+                "name": name,
+                "image_data": image_data,
+                "updated_at": datetime.datetime.utcnow()
+            },
+            "$setOnInsert": {
+                "is_active": True
+            }
+        },
         upsert=True
     )
     return jsonify({"message": f"Asset {asset_type} ({name}) uploaded successfully"}), 201
@@ -563,7 +568,8 @@ def list_assets(current_user):
             "type": "kop" if a.get('type') == "letterhead" else "ttd" if a.get('type') == "signature" else a.get('type'),
             "name": a.get('name', 'Tanpa Nama'),
             "delegation_id": a.get('delegation_id'),
-            "image_data": a.get('image_data')
+            "image_data": a.get('image_data'),
+            "is_active": a.get('is_active', True)
         })
     return jsonify(asset_list), 200
 
@@ -655,6 +661,8 @@ def update_asset(current_user, asset_id):
         update_fields['name'] = data['name'].strip()
     if 'image_data' in data and data['image_data']:
         update_fields['image_data'] = data['image_data']
+    if 'is_active' in data:
+        update_fields['is_active'] = bool(data['is_active'])
 
     if len(update_fields) <= 1:
         return jsonify({"error": "No fields to update"}), 400

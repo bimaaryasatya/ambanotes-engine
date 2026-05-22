@@ -169,29 +169,29 @@ def generate_surat_tugas(current_user):
         
         letterhead_asset = None
         if kop_name:
-            letterhead_asset = assets_col.find_one({"type": "letterhead", "org_id": org_id, "name": kop_name})
+            letterhead_asset = assets_col.find_one({"type": "letterhead", "org_id": org_id, "name": kop_name, "is_active": {"$ne": False}})
             
         if not letterhead_asset:
             if delegation_id:
                 try:
-                    letterhead_asset = assets_col.find_one({"type": "letterhead", "delegation_id": delegation_id})
+                    letterhead_asset = assets_col.find_one({"type": "letterhead", "delegation_id": delegation_id, "is_active": {"$ne": False}})
                 except Exception:
                     pass
             if not letterhead_asset:
-                letterhead_asset = assets_col.find_one({"type": "letterhead", "org_id": org_id})
+                letterhead_asset = assets_col.find_one({"type": "letterhead", "org_id": org_id, "is_active": {"$ne": False}})
 
         signature_asset = None
         if ttd_name:
-            signature_asset = assets_col.find_one({"type": "signature", "org_id": org_id, "name": ttd_name})
+            signature_asset = assets_col.find_one({"type": "signature", "org_id": org_id, "name": ttd_name, "is_active": {"$ne": False}})
             
         if not signature_asset:
             if delegation_id:
                 try:
-                    signature_asset = assets_col.find_one({"type": "signature", "delegation_id": delegation_id})
+                    signature_asset = assets_col.find_one({"type": "signature", "delegation_id": delegation_id, "is_active": {"$ne": False}})
                 except Exception:
                     pass
             if not signature_asset:
-                signature_asset = assets_col.find_one({"type": "signature", "org_id": org_id})
+                signature_asset = assets_col.find_one({"type": "signature", "org_id": org_id, "is_active": {"$ne": False}})
         
         letterhead_url = letterhead_asset.get('image_data') if letterhead_asset else None
         signature_url = signature_asset.get('image_data') if signature_asset else None
