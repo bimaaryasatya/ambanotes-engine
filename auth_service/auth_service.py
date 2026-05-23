@@ -545,7 +545,7 @@ def upload_asset(current_user):
                 "updated_at": datetime.datetime.utcnow()
             },
             "$setOnInsert": {
-                "is_active": True
+                "is_active": False
             }
         },
         upsert=True
@@ -563,13 +563,44 @@ def list_assets(current_user):
     assets = list(assets_col.find({"org_id": org_id}))
     asset_list = []
     for a in assets:
+        delegation_name = None
+        del_id = a.get('delegation_id')
+        if del_id:
+            try:
+                delegation = delegations_col.find_one({"_id": ObjectId(del_id)})
+                if delegation:
+                    delegation_name = delegation.get('name')
+            except Exception:
+                pass
+        asset_list.append({
+            "id": str(a['_id']),
+            "type": "kop" if a.get('type') == "letterhead" else "ttd" if a.get('type') == "signature" else a.get('type'),
+            "name": a.get('name', 'Tanpa Nama'),
+            "delegation_id": del_id,
+            "delegation_name": delegation_name,
+            "image_data": a.get('image_data'),
+            "is_active": a.get('is_active', False)
+        })
+    return jsonify(asset_list), 200
+
+
+@auth_bp.route('/assets/by-delegation/<delegation_id>', methods=['GET'])
+@token_required
+def get_assets_by_delegation(current_user, delegation_id):
+    """
+    Get Assets (Kop & TTD) for a Specific Delegation
+    """
+    org_id = current_user.get('org_id')
+    assets = list(assets_col.find({"org_id": org_id, "delegation_id": delegation_id}))
+    asset_list = []
+    for a in assets:
         asset_list.append({
             "id": str(a['_id']),
             "type": "kop" if a.get('type') == "letterhead" else "ttd" if a.get('type') == "signature" else a.get('type'),
             "name": a.get('name', 'Tanpa Nama'),
             "delegation_id": a.get('delegation_id'),
             "image_data": a.get('image_data'),
-            "is_active": a.get('is_active', True)
+            "is_active": a.get('is_active', False)
         })
     return jsonify(asset_list), 200
 
@@ -668,6 +699,27 @@ def update_asset(current_user, asset_id):
         return jsonify({"error": "No fields to update"}), 400
 
     try:
+        # Exclusive activation: if activating this asset, deactivate all other assets
+        # of the same type and delegation in this org
+        if update_fields.get('is_active') == True:
+            try:
+                target_asset = assets_col.find_one({"_id": ObjectId(asset_id), "org_id": org_id})
+                if target_asset:
+                    same_type = target_asset.get('type')
+                    same_delegation = target_asset.get('delegation_id')
+                    # Deactivate all other assets with same type + delegation in this org
+                    assets_col.update_many(
+                        {
+                            "_id": {"$ne": ObjectId(asset_id)},
+                            "type": same_type,
+                            "delegation_id": same_delegation,
+                            "org_id": org_id
+                        },
+                        {"$set": {"is_active": False}}
+                    )
+            except Exception as ex:
+                print(f"Exclusive activation error: {ex}")
+
         result = assets_col.update_one(
             {"_id": ObjectId(asset_id), "org_id": org_id},
             {"$set": update_fields}
