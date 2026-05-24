@@ -4,7 +4,7 @@ import sys
 # Add parent directory to path so we can import from common
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from common.logger import log_event
 from common.jwt_utils import token_required, role_required
 
@@ -15,7 +15,11 @@ import uuid
 import datetime
 import base64
 from io import BytesIO
-from common.google_drive_client import upload_file_to_google_drive
+from common.google_drive_client import (
+    upload_file_to_google_drive,
+    download_file_from_google_drive,
+    delete_file_from_google_drive
+)
 
 from common.config import Config
 
@@ -160,37 +164,46 @@ def upload_document(current_user):
     # Reset stream pointer setelah dibaca oleh request POST OCR agar bisa dibaca ulang
     file.stream.seek(0)
 
-    # 1. Periksa koneksi Google Drive
-    user_data = users_col.find_one({"_id": ObjectId(user_id)})
+    # 1. Periksa koneksi Google Drive milik owner organisasi
     google_drive_data = None
     file_data_b64 = None
 
-    google_drive_connected = user_data.get("google_drive_connected", False) if user_data else False
+    owner = users_col.find_one({
+        "org_id": org_id,
+        "role": "owner",
+        "google_drive_connected": True
+    })
 
-    if google_drive_connected:
-        refresh_token = user_data.get("google_oauth", {}).get("refresh_token")
+    if owner:
+        refresh_token = owner.get("google_oauth", {}).get("refresh_token")
         if refresh_token:
             try:
-                # Upload file fisik asli ke Google Drive user
                 google_drive_data = upload_file_to_google_drive(
                     file_stream=file.stream,
                     filename=file.filename,
                     mimetype=file.mimetype,
                     refresh_token=refresh_token
                 )
-                log_event("document_service", f"Successfully uploaded file {file.filename} to user's Google Drive", 
-                          user_id=user_id, org_id=org_id, action="DOC_DRIVE_UPLOAD_SUCCESS")
+                log_event(
+                    "document_service",
+                    f"Successfully uploaded file {file.filename} to organization owner's Google Drive",
+                    user_id=user_id,
+                    org_id=org_id,
+                    action="DOC_DRIVE_UPLOAD_SUCCESS"
+                )
             except Exception as drive_err:
-                log_event("document_service", f"Failed to upload to Google Drive: {str(drive_err)}, falling back to local Base64", 
-                          user_id=user_id, org_id=org_id, action="DOC_DRIVE_UPLOAD_FAILED")
-                # Fallback ke penyimpanan lokal/Base64 di MongoDB jika Drive upload gagal
+                log_event(
+                    "document_service",
+                    f"Failed to upload to owner's Google Drive: {str(drive_err)}, falling back to local Base64",
+                    user_id=user_id,
+                    org_id=org_id,
+                    action="DOC_DRIVE_UPLOAD_FAILED"
+                )
                 file.stream.seek(0)
                 file_data_b64 = base64.b64encode(file.stream.read()).decode("utf-8")
         else:
-            # Fallback ke penyimpanan lokal/Base64 jika refresh token tidak tersedia
             file_data_b64 = base64.b64encode(file.stream.read()).decode("utf-8")
     else:
-        # Google Drive belum terhubung: simpan file asli sebagai Base64 di MongoDB
         file_data_b64 = base64.b64encode(file.stream.read()).decode("utf-8")
 
     doc_id = uuid.uuid4().hex
@@ -394,21 +407,86 @@ def delete_document(current_user, doc_id):
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
     
-    log_event("document_service", f"Delete request for doc_id: {doc_id} by {current_user.get('username')}",
-              user_id=user_id, org_id=org_id, action="DOC_DELETE_REQUEST", metadata={"doc_id": doc_id})
+    log_event(
+        "document_service",
+        f"Delete request for doc_id: {doc_id} by {current_user.get('username')}",
+        user_id=user_id,
+        org_id=org_id,
+        action="DOC_DELETE_REQUEST",
+        metadata={"doc_id": doc_id}
+    )
+
+    doc = docs_col.find_one({"doc_id": doc_id, "org_id": org_id})
+    if not doc:
+        log_event(
+            "document_service",
+            f"Document not found or not in org for delete: {doc_id}",
+            user_id=user_id,
+            org_id=org_id,
+            action="DOC_DELETE_FAILED",
+            metadata={"doc_id": doc_id}
+        )
+        return jsonify({"error": "Document not found"}), 404
+
+    drive_delete_success = None
+
+    if doc.get("google_drive") and doc["google_drive"].get("file_id"):
+        owner = users_col.find_one({
+            "org_id": org_id,
+            "role": "owner",
+            "google_drive_connected": True
+        })
+
+        if owner:
+            refresh_token = owner.get("google_oauth", {}).get("refresh_token")
+            if refresh_token:
+                drive_delete_success = delete_file_from_google_drive(
+                    doc["google_drive"]["file_id"],
+                    refresh_token
+                )
+            else:
+                drive_delete_success = False
+        else:
+            drive_delete_success = False
+
+    if drive_delete_success is False:
+        log_event(
+            "document_service",
+            f"Failed to delete document from Google Drive: {doc_id}",
+            user_id=user_id,
+            org_id=org_id,
+            action="DOC_DELETE_FAILED",
+            metadata={
+                "doc_id": doc_id,
+                "drive_delete_success": drive_delete_success
+            }
+        )
+        return jsonify({"error": "Failed to delete document from Google Drive"}), 500
 
     result = docs_col.delete_one({"doc_id": doc_id, "org_id": org_id})
+
     if result.deleted_count:
-        log_event("document_service", f"Document deleted: {doc_id}", 
-                  user_id=user_id, org_id=org_id, action="DOC_DELETE_SUCCESS", metadata={"doc_id": doc_id})
-        return jsonify({"message": "Document deleted"}), 200
-        
-    log_event("document_service", f"Document not found or not in org for delete: {doc_id}",
-              user_id=user_id, org_id=org_id, action="DOC_DELETE_FAILED", metadata={"doc_id": doc_id})
+        log_event(
+            "document_service",
+            f"Document deleted: {doc_id}",
+            user_id=user_id,
+            org_id=org_id,
+            action="DOC_DELETE_SUCCESS",
+            metadata={
+                "doc_id": doc_id,
+                "drive_delete_success": drive_delete_success
+            }
+        )
+
+        return jsonify({
+            "message": "Document deleted",
+            "google_drive_deleted": drive_delete_success
+        }), 200
+
     return jsonify({"error": "Document not found"}), 404
 
 
-@document_bp.route('/replace/<doc_id>', methods=['PUT'])
+@document_bp.route('/replace/<doc_id>', methods=['PUT', 'POST'])
 @token_required
 def replace_document(current_user, doc_id):
     """
@@ -514,7 +592,6 @@ def replace_document(current_user, doc_id):
         "entities": entities
     }), 200
 
-
 @document_bp.route('/<doc_id>', methods=['GET'])
 @token_required
 def get_document_detail(current_user, doc_id):
@@ -555,11 +632,93 @@ def get_document_detail(current_user, doc_id):
     return jsonify(doc), 200
 
 
+@document_bp.route('/download/<doc_id>', methods=['GET'])
+@token_required
+def download_document(current_user, doc_id):
+    """
+    Download Document File
+    ---
+    tags:
+      - Document
+    produces:
+      - application/octet-stream
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: doc_id
+        in: path
+        type: string
+        required: true
+        description: Unique document ID to download
+    responses:
+      200:
+        description: Document file downloaded successfully
+      400:
+        description: Google Drive is not connected or refresh token is missing
+      401:
+        description: Unauthorized - invalid or missing token
+      404:
+        description: Document not found or file source unavailable
+      500:
+        description: Download failed
+    """
+    org_id = current_user.get("org_id")
+
+    doc = docs_col.find_one({"doc_id": doc_id, "org_id": org_id})
+    if not doc:
+        return jsonify({"error": "Document not found"}), 404
+
+    filename = doc.get("filename", "document")
+    mimetype = doc.get("mimetype", "application/octet-stream")
+
+    try:
+        if doc.get("google_drive") and doc["google_drive"].get("file_id"):
+            owner = users_col.find_one({
+                "org_id": org_id,
+                "role": "owner",
+                "google_drive_connected": True
+            })
+
+            if not owner:
+                return jsonify({"error": "Organization owner's Google Drive is not connected"}), 400
+
+            refresh_token = owner.get("google_oauth", {}).get("refresh_token")
+            if not refresh_token:
+                return jsonify({"error": "Missing owner's Google refresh token"}), 400
+
+            file_id = doc["google_drive"]["file_id"]
+            file_bytes = download_file_from_google_drive(file_id, refresh_token)
+
+        elif doc.get("file_data"):
+            file_bytes = base64.b64decode(doc["file_data"])
+
+        else:
+            return jsonify({"error": "Document file source is not available"}), 404
+
+        return send_file(
+            BytesIO(file_bytes),
+            mimetype=mimetype,
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        log_event(
+            "document_service",
+            f"Download document failed: {str(e)}",
+            org_id=org_id,
+            action="DOC_DOWNLOAD_FAILED"
+        )
+        return jsonify({"error": f"Download failed: {str(e)}"}), 500
+
 @document_bp.route('/migrate-to-drive', methods=['POST'])
 def migrate_to_drive():
     """
     Migrasi dokumen fisik lama dari MongoDB (Base64) ke Google Drive setelah user terhubung
     """
+
+    
+
     data = request.get_json(force=True, silent=True) or {}
     user_id = data.get("user_id")
     
@@ -576,8 +735,10 @@ def migrate_to_drive():
         return jsonify({"error": "Missing Google refresh token"}), 400
         
     # Ambil semua dokumen milik user ini yang masih disimpan di MongoDB (memiliki file_data dan tidak memiliki google_drive)
+    org_id = user.get("org_id")
+
     docs_to_migrate = list(docs_col.find({
-        "uploaded_by": user_id,
+        "org_id": org_id,
         "file_data": {"$exists": True, "$ne": None},
         "google_drive": None
     }))

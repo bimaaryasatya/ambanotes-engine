@@ -1152,6 +1152,7 @@ def reset_password():
 
 @auth_bp.route('/google/disconnect', methods=['POST'])
 @token_required
+@role_required('owner')
 def google_disconnect(current_user):
     """
     Disconnect Google Drive Account
