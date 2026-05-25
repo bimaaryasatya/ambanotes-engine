@@ -33,8 +33,9 @@ SURAT_TUGAS_TEMPLATE = """
         .kop-img { max-width: 100%; height: auto; }
         .title { text-align: center; text-decoration: underline; font-weight: bold; font-size: 20px; margin-bottom: 4px; }
         .nomor { text-align: center; margin-bottom: 26px; }
-        .content { margin-bottom: 18px; }
-        .task-box { margin: 16px 0; padding: 12px 14px; border: 1px solid #222; }
+        .content { margin-bottom: 18px; text-align: left; }
+        .details-table { width: 100%; margin-left: 20px; border-collapse: collapse; margin-bottom: 16px; }
+        .details-table td { padding: 4px 0; vertical-align: top; text-align: left; }
         .footer { margin-top: 52px; float: right; width: 280px; text-align: center; }
         .signature-img { max-width: 150px; max-height: 90px; margin: 10px 0; }
         .clear { clear: both; }
@@ -54,22 +55,46 @@ SURAT_TUGAS_TEMPLATE = """
     <div class="nomor">Nomor: {{ doc_number }}</div>
 
     <div class="content">
-        <p>Yang bertanda tangan di bawah ini memberikan penugasan kepada pihak terkait untuk melaksanakan kegiatan sebagai berikut:</p>
-        <div class="task-box">
-            <strong>{{ task_description }}</strong>
-        </div>
-        <p>Demikian surat tugas ini dibuat untuk dapat dipergunakan sebagaimana mestinya.</p>
+        <p>Yang bertanda tangan di bawah ini:</p>
+        <table class="details-table">
+            <tr>
+                <td style="width: 120px;">Nama</td>
+                <td style="width: 15px;">:</td>
+                <td><strong>{{ signatory_name }}</strong></td>
+            </tr>
+            <tr>
+                <td>Jabatan</td>
+                <td>:</td>
+                <td>{{ signatory_jabatan }}</td>
+            </tr>
+        </table>
+
+        <p style="margin-top: 16px;">Dengan ini menugaskan kepada:</p>
+        <table class="details-table">
+            <tr>
+                <td style="width: 120px;">Nama</td>
+                <td style="width: 15px;">:</td>
+                <td><strong>{{ assignee_names }}</strong></td>
+            </tr>
+            <tr>
+                <td>Jabatan</td>
+                <td>:</td>
+                <td>{{ assignee_jabatan }}</td>
+            </tr>
+        </table>
+
+        <p style="margin-top: 24px;">Pada Pekerjaan/Kegiatan: <strong>{{ task_description }}</strong></p>
+        
+        <p style="margin-top: 20px;">Demikian surat tugas ini dibuat sebagaimana mestinya dan untuk dapat dipergunakan seperlunya.</p>
     </div>
 
     <div class="footer">
         <p>{{ city }}, {{ current_date }}</p>
-        <p>Hormat Kami,</p>
         {% if signature %}
             <img src="{{ signature }}" class="signature-img">
         {% else %}
             <div style="height: 80px;"></div>
         {% endif %}
-        <p><strong>( {{ signatory_name }} )</strong></p>
     </div>
     <div class="clear"></div>
 </body>
@@ -303,36 +328,55 @@ def _render_assignment_pdf_bytes(payload, letterhead_image, signature_image):
     draw.text(((page_width - (number_box[2] - number_box[0])) / 2, cursor_y), number_text, font=subtitle_font, fill=(0, 0, 0))
     cursor_y += 78
 
-    intro = "Yang bertanda tangan di bawah ini memberikan penugasan kepada pihak terkait untuk melaksanakan kegiatan sebagai berikut:"
+    # 1. Yang bertanda tangan di bawah ini:
+    intro = "Yang bertanda tangan di bawah ini:"
     cursor_y = _draw_wrapped_paragraph(draw, intro, body_font, margin_x, cursor_y, usable_width)
-    cursor_y += 18
+    cursor_y += 20
 
-    box_top = cursor_y
-    text_x = margin_x + 28
-    text_y = box_top + 24
-    wrapped_task_lines = _wrap_text(draw, payload['task_description'], body_bold_font, usable_width - 56)
-    line_height = draw.textbbox((0, 0), "Ag", font=body_bold_font)[3] + 12
-    box_height = max(120, 34 + (len(wrapped_task_lines) * line_height))
-    draw.rounded_rectangle(
-        (margin_x, box_top, page_width - margin_x, box_top + box_height),
-        radius=18,
-        outline=(0, 0, 0),
-        width=2,
-    )
-    for line in wrapped_task_lines:
-        draw.text((text_x, text_y), line, font=body_bold_font, fill=(0, 0, 0))
-        text_y += line_height
-    cursor_y = box_top + box_height + 30
+    # Signatory details
+    # Nama
+    draw.text((margin_x + 30, cursor_y), "Nama", font=body_font, fill=(0, 0, 0))
+    draw.text((margin_x + 180, cursor_y), ":", font=body_font, fill=(0, 0, 0))
+    cursor_y = _draw_wrapped_paragraph(draw, payload['signatory_name'], body_bold_font, margin_x + 210, cursor_y, usable_width - 210)
+    cursor_y += 12
 
-    closing = "Demikian surat tugas ini dibuat untuk dapat dipergunakan sebagaimana mestinya."
+    # Jabatan
+    draw.text((margin_x + 30, cursor_y), "Jabatan", font=body_font, fill=(0, 0, 0))
+    draw.text((margin_x + 180, cursor_y), ":", font=body_font, fill=(0, 0, 0))
+    cursor_y = _draw_wrapped_paragraph(draw, payload['signatory_jabatan'], body_font, margin_x + 210, cursor_y, usable_width - 210)
+    cursor_y += 36
+
+    # 2. Dengan ini menugaskan kepada:
+    assign_intro = "Dengan ini menugaskan kepada:"
+    cursor_y = _draw_wrapped_paragraph(draw, assign_intro, body_font, margin_x, cursor_y, usable_width)
+    cursor_y += 20
+
+    # Assignee details
+    # Nama
+    draw.text((margin_x + 30, cursor_y), "Nama", font=body_font, fill=(0, 0, 0))
+    draw.text((margin_x + 180, cursor_y), ":", font=body_font, fill=(0, 0, 0))
+    cursor_y = _draw_wrapped_paragraph(draw, payload['assignee_names'], body_bold_font, margin_x + 210, cursor_y, usable_width - 210)
+    cursor_y += 12
+
+    # Jabatan
+    draw.text((margin_x + 30, cursor_y), "Jabatan", font=body_font, fill=(0, 0, 0))
+    draw.text((margin_x + 180, cursor_y), ":", font=body_font, fill=(0, 0, 0))
+    cursor_y = _draw_wrapped_paragraph(draw, payload['assignee_jabatan'], body_font, margin_x + 210, cursor_y, usable_width - 210)
+    cursor_y += 36
+
+    # 3. Pada Pekerjaan/Kegiatan:
+    task_intro = f"Pada Pekerjaan/Kegiatan: {payload['task_description']}"
+    cursor_y = _draw_wrapped_paragraph(draw, task_intro, body_font, margin_x, cursor_y, usable_width)
+    cursor_y += 36
+
+    # 4. Closing
+    closing = "Demikian surat tugas ini dibuat sebagaimana mestinya dan untuk dapat dipergunakan seperlunya."
     cursor_y = _draw_wrapped_paragraph(draw, closing, body_font, margin_x, cursor_y, usable_width)
-    cursor_y += 60
+    cursor_y += 80
 
     footer_x = page_width - 420
     draw.text((footer_x, cursor_y), f"{payload['city']}, {payload['current_date']}", font=small_font, fill=(0, 0, 0))
     cursor_y += 42
-    draw.text((footer_x + 24, cursor_y), "Hormat Kami,", font=small_font, fill=(0, 0, 0))
-    cursor_y += 34
 
     if signature_image:
         max_signature_width = 200
@@ -345,8 +389,6 @@ def _render_assignment_pdf_bytes(payload, letterhead_image, signature_image):
         cursor_y += resized.height + 24
     else:
         cursor_y += 110
-
-    draw.text((footer_x, cursor_y), f"( {payload['signatory_name']} )", font=body_bold_font, fill=(0, 0, 0))
 
     pdf_buffer = io.BytesIO()
     page.save(pdf_buffer, format="PDF", resolution=150.0)
@@ -385,6 +427,7 @@ def _build_generation_payload(data, current_user, requester, reference_doc=None)
 
     delegation_id = (
         data.get('delegation_id')
+        or (reference_doc.get('delegation_id') if reference_doc else None)
         or requester.get('delegation_id')
         or current_user.get('delegation_id')
         or 'general'
@@ -413,10 +456,47 @@ def _build_generation_payload(data, current_user, requester, reference_doc=None)
     letterhead_value = letterhead_asset.get('image_data') if letterhead_asset else None
     signature_value = signature_asset.get('image_data') if signature_asset else None
 
+    # Fetch assignee members from the delegation (division)
+    assigned_members = []
+    if delegation_id and delegation_id != 'general':
+        users_in_del = list(users_col.find({
+            "org_id": org_id,
+            "delegation_id": {"$in": [delegation_id, _safe_object_id(delegation_id)]}
+        }))
+        assigned_members = [u.get('username') for u in users_in_del if u.get('username')]
+    
+    if not assigned_members:
+        assigned_members = [requester.get('username') or current_user.get('username') or 'Member']
+    
+    assignee_names = ", ".join(assigned_members)
+    assignee_jabatan = f"{delegation_name} {org_name}" if delegation_name and delegation_name != 'General' else org_name
+
+    # Determine signatory's jabatan
+    signatory_user = users_col.find_one({"username": signatory_name, "org_id": org_id})
+    if not signatory_user:
+        signatory_user = users_col.find_one({"_id": _safe_object_id(current_user.get('user_id'))})
+    
+    if signatory_user:
+        sig_role = signatory_user.get('role', 'member')
+        if sig_role == 'owner':
+            signatory_jabatan = f"Direktur {org_name}"
+        else:
+            sig_del_id = signatory_user.get('delegation_id')
+            sig_del_name = _resolve_delegation_name(org_id, sig_del_id) if sig_del_id else None
+            if sig_del_name and sig_del_name != 'General':
+                signatory_jabatan = f"Kepala Divisi {sig_del_name} {org_name}"
+            else:
+                signatory_jabatan = f"Staf {org_name}"
+    else:
+        signatory_jabatan = "Kepala Instansi"
+
     return {
         "doc_number": doc_number,
         "task_description": task_description,
         "signatory_name": signatory_name,
+        "signatory_jabatan": signatory_jabatan,
+        "assignee_names": assignee_names,
+        "assignee_jabatan": assignee_jabatan,
         "delegation_id": delegation_id,
         "delegation_name": delegation_name,
         "org_name": org_name,
@@ -440,6 +520,9 @@ def _build_html_content(payload):
         doc_number=payload['doc_number'],
         task_description=payload['task_description'],
         signatory_name=payload['signatory_name'],
+        signatory_jabatan=payload['signatory_jabatan'],
+        assignee_names=payload['assignee_names'],
+        assignee_jabatan=payload['assignee_jabatan'],
         delegation_name=payload['delegation_name'],
         org_name=payload['org_name'],
         letterhead=payload['letterhead_value'],
@@ -481,6 +564,9 @@ def _build_doc_record(doc_id, payload, current_user, requester, status):
             "doc_number": payload['doc_number'],
             "task_description": payload['task_description'],
             "signatory_name": payload['signatory_name'],
+            "signatory_jabatan": payload['signatory_jabatan'],
+            "assignee_names": payload['assignee_names'],
+            "assignee_jabatan": payload['assignee_jabatan'],
             "reference_doc_id": payload['reference_doc_id'],
             "reference_title": payload['reference_title'],
             "date": payload['date'],
@@ -565,6 +651,9 @@ def _finalize_generated_document(doc, approver):
         "generated_data": {
             **generated_data,
             "signatory_name": payload['signatory_name'],
+            "signatory_jabatan": payload['signatory_jabatan'],
+            "assignee_names": payload['assignee_names'],
+            "assignee_jabatan": payload['assignee_jabatan'],
             "kop": payload['kop'],
             "ttd": payload['ttd'],
             "date": payload['date'],
