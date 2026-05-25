@@ -349,7 +349,7 @@ def list_documents(current_user):
     return jsonify(docs), 200
 
 
-@document_bp.route('/disposition/<doc_id>', methods=['POST'])
+@document_bp.route('/disposition/<path:doc_id>', methods=['POST'])
 @token_required
 @role_required('owner')
 def disposition_document(current_user, doc_id):
@@ -400,7 +400,7 @@ def disposition_document(current_user, doc_id):
         return jsonify({"error": f"Failed to disposition document: {str(e)}"}), 500
 
 
-@document_bp.route('/<doc_id>', methods=['DELETE'])
+@document_bp.route('/<path:doc_id>', methods=['DELETE'])
 @token_required
 @role_required('owner')
 def delete_document(current_user, doc_id):
@@ -522,7 +522,7 @@ def delete_document(current_user, doc_id):
     return jsonify({"error": "Document not found"}), 404
 
 
-@document_bp.route('/replace/<doc_id>', methods=['PUT', 'POST'])
+@document_bp.route('/replace/<path:doc_id>', methods=['PUT', 'POST'])
 @token_required
 @role_required('owner')
 def replace_document(current_user, doc_id):
@@ -632,7 +632,7 @@ def replace_document(current_user, doc_id):
         "entities": entities
     }), 200
 
-@document_bp.route('/<doc_id>', methods=['GET'])
+@document_bp.route('/<path:doc_id>', methods=['GET'])
 @token_required
 def get_document_detail(current_user, doc_id):
     """
@@ -672,7 +672,7 @@ def get_document_detail(current_user, doc_id):
     return jsonify(doc), 200
 
 
-@document_bp.route('/download/<doc_id>', methods=['GET'])
+@document_bp.route('/download/<path:doc_id>', methods=['GET'])
 @token_required
 def download_document(current_user, doc_id):
     """
