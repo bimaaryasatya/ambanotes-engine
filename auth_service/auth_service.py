@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash, check_password_hash
-from common.db import users_col, orgs_col, invitations_col, delegations_col, assets_col, docs_col, otps_col
+from common.db import users_col, orgs_col, invitations_col, delegations_col, assets_col, docs_col, otps_col, logs_col
 from common.jwt_utils import generate_token, token_required, role_required
 from common.email_utils import send_otp_email, send_invitation_email
 from common.logger import log_event
@@ -172,7 +172,16 @@ def register():
     result = users_col.insert_one(user)
     user_id = str(result.inserted_id)
 
-    log_event("auth_service", f"User registered: {username}", user_id=user_id, org_id=org_id)
+    log_event(
+        "auth_service",
+        f"User registered: {username}",
+        user_id=user_id,
+        org_id=org_id,
+        action="REGISTER_SUCCESS",
+        audience="user" if role != "owner" else "owner",
+        visibility="app",
+        severity="info",
+    )
 
     return jsonify({
         "message": "User registered successfully",
@@ -227,7 +236,16 @@ def login():
         return jsonify({"error": "Invalid email or password"}), 401
 
     token = generate_token(user)
-    log_event("auth_service", f"User logged in: {user['username']}", user_id=str(user['_id']), org_id=user.get('org_id'))
+    log_event(
+        "auth_service",
+        f"User logged in: {user['username']}",
+        user_id=str(user['_id']),
+        org_id=user.get('org_id'),
+        action="LOGIN_SUCCESS",
+        audience="owner" if user.get('role') == 'owner' else "user",
+        visibility="app",
+        severity="info",
+    )
 
     return jsonify({
         "token": token,
@@ -316,6 +334,80 @@ def get_profile(current_user):
             user_data['delegation_name'] = "Invalid Delegation ID"
 
     return jsonify(user_data), 200
+
+
+@auth_bp.route('/activity-logs', methods=['GET'])
+@token_required
+def get_activity_logs(current_user):
+    """
+    Get Current User Activity Logs
+    ---
+    tags:
+      - Auth
+    produces:
+      - application/json
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: limit
+        in: query
+        type: integer
+        required: false
+        description: Maximum number of activity logs to return
+    responses:
+      200:
+        description: User activity logs
+    """
+    user_id = current_user.get('user_id')
+    org_id = current_user.get('org_id')
+    limit = request.args.get('limit', default=50, type=int) or 50
+    limit = max(1, min(limit, 200))
+
+    try:
+        logs = list(
+            logs_col.find({
+                "user_id": user_id,
+                "audience": {
+                    "$in": ["user", "owner"]
+                },
+                "visibility": "app",
+            })
+            .sort("timestamp", -1)
+            .limit(limit)
+        )
+
+        result = []
+        for item in logs:
+            result.append({
+                "id": str(item.get("_id")),
+                "service": item.get("service"),
+                "message": item.get("message"),
+                "action": item.get("action"),
+                "metadata": item.get("metadata", {}),
+                "timestamp": item.get("timestamp").isoformat() if item.get("timestamp") else None,
+            })
+
+        log_event(
+            "auth_service",
+            f"Activity logs requested by {current_user.get('username')}",
+            org_id=org_id,
+            action="ACTIVITY_LOGS_VIEWED",
+            metadata={"limit": limit, "viewer_user_id": user_id},
+            audience="developer",
+            visibility="dashboard",
+            severity="info",
+        )
+        return jsonify(result), 200
+    except Exception as e:
+        log_event(
+            "auth_service",
+            f"Failed to fetch activity logs: {str(e)}",
+            user_id=user_id,
+            org_id=org_id,
+            action="ACTIVITY_LOGS_FAILED",
+            metadata={"error": str(e)},
+        )
+        return jsonify({"error": "Failed to fetch activity logs"}), 500
 
 
 @auth_bp.route('/delegations', methods=['POST'])
@@ -463,6 +555,22 @@ def change_delegation(current_user):
         users_col.update_one({"_id": ObjectId(target_user_id)}, {"$set": {"delegation_id": None}})
         docs_col.update_many({"uploaded_by": target_user_id}, {"$set": {"delegation_id": None}})
         docs_col.update_many({"uploaded_by": ObjectId(target_user_id)}, {"$set": {"delegation_id": None}})
+        log_event(
+            "auth_service",
+            f"User {target_user['username']} moved to General",
+            user_id=current_user.get('user_id'),
+            org_id=org_id,
+            action="MEMBER_DELEGATION_CHANGED",
+            metadata={
+                "target_user_id": target_user_id,
+                "target_username": target_user["username"],
+                "new_delegation_id": None,
+                "new_delegation_name": "General",
+            },
+            audience="owner",
+            visibility="app",
+            severity="info",
+        )
         return jsonify({"message": f"User {target_user['username']} moved to General"}), 200
 
     try:
@@ -476,6 +584,22 @@ def change_delegation(current_user):
     users_col.update_one({"_id": ObjectId(target_user_id)}, {"$set": {"delegation_id": new_del_id}})
     docs_col.update_many({"uploaded_by": target_user_id}, {"$set": {"delegation_id": new_del_id}})
     docs_col.update_many({"uploaded_by": ObjectId(target_user_id)}, {"$set": {"delegation_id": new_del_id}})
+    log_event(
+        "auth_service",
+        f"User {target_user['username']} moved to {new_delegation['name']}",
+        user_id=current_user.get('user_id'),
+        org_id=org_id,
+        action="MEMBER_DELEGATION_CHANGED",
+        metadata={
+            "target_user_id": target_user_id,
+            "target_username": target_user["username"],
+            "new_delegation_id": new_del_id,
+            "new_delegation_name": new_delegation["name"],
+        },
+        audience="owner",
+        visibility="app",
+        severity="info",
+    )
 
     return jsonify({"message": f"User {target_user['username']} moved to {new_delegation['name']}"}), 200
 
@@ -920,6 +1044,17 @@ def invite_member(current_user):
         "status": "pending", 
         "created_at": datetime.datetime.utcnow()
     })
+    log_event(
+        "auth_service",
+        f"Invitation sent to {email}",
+        user_id=current_user.get("user_id"),
+        org_id=org_id,
+        action="INVITE_MEMBER_SUCCESS",
+        metadata={"email": email, "role": role},
+        audience="owner",
+        visibility="app",
+        severity="info",
+    )
 
     return jsonify({"message": "Invitation sent successfully to email"}), 201
 
@@ -1178,7 +1313,15 @@ def google_disconnect(current_user):
                 }
             }
         )
-        log_event("auth_service", f"User {user_id} disconnected Google Drive", user_id=user_id, action="GOOGLE_DRIVE_DISCONNECTED")
+        log_event(
+            "auth_service",
+            f"User {user_id} disconnected Google Drive",
+            user_id=user_id,
+            action="GOOGLE_DRIVE_DISCONNECTED",
+            audience="owner",
+            visibility="app",
+            severity="info",
+        )
         return jsonify({"message": "Google Drive berhasil diputuskan."}), 200
     except Exception as e:
         log_event("auth_service", f"Gagal memutuskan Google Drive: {str(e)}", user_id=user_id, action="GOOGLE_DRIVE_DISCONNECT_FAILED")
@@ -1271,7 +1414,15 @@ def google_callback():
         if result.matched_count == 0:
             return "<h3>Error: Pengguna tidak ditemukan di sistem.</h3>", 404
             
-        log_event("auth_service", f"Google Drive successfully connected for user: {user_id}", user_id=user_id, action="GOOGLE_DRIVE_CONNECTED")
+        log_event(
+            "auth_service",
+            f"Google Drive successfully connected for user: {user_id}",
+            user_id=user_id,
+            action="GOOGLE_DRIVE_CONNECTED",
+            audience="owner",
+            visibility="app",
+            severity="info",
+        )
         
         # Memicu migrasi dokumen lama dari MongoDB ke Google Drive
         try:
