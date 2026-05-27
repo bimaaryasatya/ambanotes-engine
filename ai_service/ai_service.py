@@ -194,7 +194,10 @@ def chat(current_user):
             )
 
         log_event("ai_service", "Chat response generated",
-                  user_id=user_id, org_id=org_id, action="AI_CHAT_SUCCESS")
+                  user_id=user_id, org_id=org_id, action="AI_CHAT_SUCCESS",
+                  audience="owner" if current_user.get("role") == "owner" else "user",
+                  visibility="app",
+                  severity="info")
         return jsonify({"answer": answer, "history": updated_history}), 200
 
     except Exception as e:
@@ -300,6 +303,80 @@ def get_chat_detail(current_user, doc_id):
         return jsonify(result), 200
     except Exception as e:
         log_event("ai_service", f"Get chat detail error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_GET_CHAT_DETAIL_FAILED")
+        return jsonify({"error": "An internal error occurred"}), 500
+
+
+@ai_bp.route("/chat/<doc_id>", methods=["DELETE"])
+@token_required
+def delete_chat_detail(current_user, doc_id):
+    """
+    Delete Chat History for a Specific Document
+    ---
+    tags:
+      - AI
+    produces:
+      - application/json
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: doc_id
+        in: path
+        type: string
+        required: true
+        description: "The document ID of the chat to delete"
+    responses:
+      200:
+        description: Chat history deleted successfully
+      404:
+        description: Chat history not found
+    """
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+
+    log_event(
+        "ai_service",
+        f"Delete chat request for doc_id: {doc_id} from: {current_user.get('username')}",
+        user_id=user_id,
+        org_id=org_id,
+        action="AI_DELETE_CHAT_START",
+        metadata={"doc_id": doc_id},
+    )
+
+    try:
+        result = chats_col.delete_one({"user_id": user_id, "doc_id": doc_id})
+
+        if result.deleted_count == 0:
+            log_event(
+                "ai_service",
+                f"Chat history not found for delete: {doc_id}",
+                user_id=user_id,
+                org_id=org_id,
+                action="AI_DELETE_CHAT_NOT_FOUND",
+                metadata={"doc_id": doc_id},
+            )
+            return jsonify({"error": "Chat history not found"}), 404
+
+        log_event(
+            "ai_service",
+            f"Chat history deleted for doc_id: {doc_id}",
+            user_id=user_id,
+            org_id=org_id,
+            action="AI_DELETE_CHAT_SUCCESS",
+            metadata={"doc_id": doc_id},
+            audience="owner" if current_user.get("role") == "owner" else "user",
+            visibility="app",
+            severity="info",
+        )
+        return jsonify({"message": "Chat history deleted"}), 200
+    except Exception as e:
+        log_event(
+            "ai_service",
+            f"Delete chat error: {str(e)}",
+            user_id=user_id,
+            org_id=org_id,
+            action="AI_DELETE_CHAT_FAILED",
+            metadata={"doc_id": doc_id, "error": str(e)},
+        )
         return jsonify({"error": "An internal error occurred"}), 500
 
 

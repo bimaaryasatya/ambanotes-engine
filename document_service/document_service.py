@@ -49,6 +49,27 @@ def process_ai_pipeline(text):
         return {"label": "Error"}, {}
 
 
+def _get_delegation_name(delegation_id, org_id):
+    if not delegation_id or delegation_id == "general":
+        return "General"
+
+    delegation = None
+    try:
+        delegation = delegations_col.find_one({"_id": ObjectId(delegation_id), "org_id": org_id})
+    except Exception:
+        delegation = delegations_col.find_one({"_id": delegation_id, "org_id": org_id})
+
+    return delegation.get("name") if delegation else "General"
+
+
+def _serialize_doc(doc):
+    doc.pop("_id", None)
+    delegation_id = doc.get("delegation_id") or "general"
+    doc["delegation_id"] = delegation_id
+    doc["delegation_name"] = _get_delegation_name(delegation_id, doc.get("org_id"))
+    return doc
+
+
 def generate_security_suggestion(doc_data):
     """
     Menghasilkan saran keamanan dinamis bersih (tanpa emoji, bold markdown pada kata penting) menggunakan Mistral AI.
@@ -216,6 +237,7 @@ def upload_document(current_user):
         "uploaded_at": datetime.datetime.utcnow(),
         "uploaded_by": user_id,
         "org_id": org_id,
+        "delegation_id": "general",
         "google_drive": google_drive_data,
         "mimetype": file.mimetype,
         "status": "processed"
@@ -232,10 +254,14 @@ def upload_document(current_user):
         doc_data["security_suggestion"] = generate_security_suggestion(doc_data)
     else:
         doc_data["security_suggestion"] = None
+    doc_data["delegation_name"] = "General"
 
     log_event("document_service", f"File processed and saved: {file.filename}", 
               user_id=user_id, org_id=org_id, action="DOC_UPLOAD_SUCCESS", 
-              metadata={"doc_id": doc_id, "filename": file.filename})
+              metadata={"doc_id": doc_id, "filename": file.filename},
+              audience="owner" if current_user.get("role") == "owner" else "user",
+              visibility="app",
+              severity="info")
               
     return jsonify(doc_data), 201
 
@@ -281,7 +307,13 @@ def list_documents(current_user):
         if is_general:
             query = {
                 "org_id": org_id,
-                "delegation_id": "general"
+                "$or": [
+                    {"delegation_id": "general"},
+                    {"delegation_id": None},
+                    {"delegation_id": {"$exists": False}},
+                    {"uploaded_by": user_id},
+                    {"uploaded_by": ObjectId(user_id)} if ObjectId.is_valid(user_id or "") else {"uploaded_by": user_id},
+                ]
             }
             docs = list(docs_col.find(query))
             print(f"[DEBUG LIST_DOCS] Member is in General division. Found {len(docs)} general documents.")
@@ -290,7 +322,9 @@ def list_documents(current_user):
                 "org_id": org_id,
                 "$or": [
                     {"delegation_id": delegation_id},
-                    {"delegation_id": str(delegation_id)}
+                    {"delegation_id": str(delegation_id)},
+                    {"uploaded_by": user_id},
+                    {"uploaded_by": ObjectId(user_id)} if ObjectId.is_valid(user_id or "") else {"uploaded_by": user_id},
                 ]
             }
             docs = list(docs_col.find(query))
@@ -307,8 +341,7 @@ def list_documents(current_user):
             for d in docs:
                 print(f"  -> Doc ID: {d.get('doc_id')}, Title: '{d.get('title')}', delegation_id: {d.get('delegation_id')}")
 
-    for doc in docs:
-        doc.pop('_id', None)
+    docs = [_serialize_doc(doc) for doc in docs]
         
     log_event("document_service", f"Listed docs for org: {org_id}, role: {role}", 
               user_id=user_id, org_id=org_id, action="DOC_LIST_VIEW")
@@ -316,7 +349,7 @@ def list_documents(current_user):
     return jsonify(docs), 200
 
 
-@document_bp.route('/disposition/<doc_id>', methods=['POST'])
+@document_bp.route('/disposition/<path:doc_id>', methods=['POST'])
 @token_required
 @role_required('owner')
 def disposition_document(current_user, doc_id):
@@ -367,7 +400,7 @@ def disposition_document(current_user, doc_id):
         return jsonify({"error": f"Failed to disposition document: {str(e)}"}), 500
 
 
-@document_bp.route('/<doc_id>', methods=['DELETE'])
+@document_bp.route('/<path:doc_id>', methods=['DELETE'])
 @token_required
 @role_required('owner')
 def delete_document(current_user, doc_id):
@@ -475,7 +508,10 @@ def delete_document(current_user, doc_id):
             metadata={
                 "doc_id": doc_id,
                 "drive_delete_success": drive_delete_success
-            }
+            },
+            audience="owner" if current_user.get("role") == "owner" else "user",
+            visibility="app",
+            severity="info",
         )
 
         return jsonify({
@@ -486,8 +522,9 @@ def delete_document(current_user, doc_id):
     return jsonify({"error": "Document not found"}), 404
 
 
-@document_bp.route('/replace/<doc_id>', methods=['PUT', 'POST'])
+@document_bp.route('/replace/<path:doc_id>', methods=['PUT', 'POST'])
 @token_required
+@role_required('owner')
 def replace_document(current_user, doc_id):
     """
     Replace and Re-process Document
@@ -582,7 +619,10 @@ def replace_document(current_user, doc_id):
     docs_col.update_one({"doc_id": doc_id, "org_id": org_id}, {"$set": update_data})
     
     log_event("document_service", f"Document replaced and re-processed: {doc_id}",
-              user_id=user_id, org_id=org_id, action="DOC_REPLACE_SUCCESS", metadata={"doc_id": doc_id})
+              user_id=user_id, org_id=org_id, action="DOC_REPLACE_SUCCESS", metadata={"doc_id": doc_id},
+              audience="owner" if current_user.get("role") == "owner" else "user",
+              visibility="app",
+              severity="info")
 
     return jsonify({
         "message": "Document updated and re-processed",
@@ -592,7 +632,7 @@ def replace_document(current_user, doc_id):
         "entities": entities
     }), 200
 
-@document_bp.route('/<doc_id>', methods=['GET'])
+@document_bp.route('/<path:doc_id>', methods=['GET'])
 @token_required
 def get_document_detail(current_user, doc_id):
     """
@@ -621,7 +661,7 @@ def get_document_detail(current_user, doc_id):
     if not doc:
         return jsonify({"error": "Document not found"}), 404
         
-    doc.pop('_id', None)
+    doc = _serialize_doc(doc)
     
     # Jika Google Drive belum terhubung, generate saran keamanan dinamis dengan Mistral AI
     if not doc.get("google_drive"):
@@ -632,7 +672,7 @@ def get_document_detail(current_user, doc_id):
     return jsonify(doc), 200
 
 
-@document_bp.route('/download/<doc_id>', methods=['GET'])
+@document_bp.route('/download/<path:doc_id>', methods=['GET'])
 @token_required
 def download_document(current_user, doc_id):
     """

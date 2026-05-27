@@ -9,7 +9,17 @@ def get_logger(name):
     logger = logging.getLogger(name)
     return logger
 
-def log_event(service_name, message, user_id=None, org_id=None, action=None, metadata=None):
+def log_event(
+    service_name,
+    message,
+    user_id=None,
+    org_id=None,
+    action=None,
+    metadata=None,
+    audience="developer",
+    visibility="internal",
+    severity="info",
+):
     """
     Log an event to the database and console.
     
@@ -20,9 +30,13 @@ def log_event(service_name, message, user_id=None, org_id=None, action=None, met
         org_id (str, optional): Organization ID related to the action
         action (str, optional): Action type (e.g., 'LOGIN_SUCCESS', 'DOC_DELETE')
         metadata (dict, optional): Additional structured data
+        audience (str, optional): Target audience: user, owner, developer
+        visibility (str, optional): Surface: app, dashboard, internal
+        severity (str, optional): Severity level: info, warning, error, debug
     """
     logger = get_logger(service_name)
-    logger.info(message)
+    log_method = getattr(logger, severity.lower(), logger.info)
+    log_method(message)
     
     # Import inside function to avoid circular dependencies
     from common.db import logs_col
@@ -34,6 +48,9 @@ def log_event(service_name, message, user_id=None, org_id=None, action=None, met
         "org_id": org_id,
         "action": action,
         "metadata": metadata or {},
+        "audience": audience,
+        "visibility": visibility,
+        "severity": severity,
         "timestamp": datetime.datetime.utcnow()
     }
     
