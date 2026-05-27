@@ -41,6 +41,21 @@ def _validate_username(username: str) -> str | None:
     return None
 
 
+def _validate_org_name(name: str) -> str | None:
+    if len(name) < 3 or len(name) > 100:
+        return "Nama organisasi harus antara 3 dan 100 karakter"
+    return None
+
+
+def _find_org_by_id(org_id):
+    if not org_id:
+        return None
+    try:
+        return orgs_col.find_one({"_id": ObjectId(org_id) if isinstance(org_id, str) else org_id})
+    except Exception:
+        return None
+
+
 # --- Endpoints ---
 
 @auth_bp.route('/register', methods=['POST'])
@@ -285,13 +300,15 @@ def get_profile(current_user):
         "role": user.get('role', 'member'),
         "org_id": user.get('org_id'),
         "delegation_id": user.get('delegation_id'),
-        "google_drive_connected": user.get('google_drive_connected', False)
+        "google_drive_connected": user.get('google_drive_connected', False),
+        "profile_image": user.get('profile_image')
     }
     
     if user.get('org_id'):
         try:
             org = orgs_col.find_one({"_id": ObjectId(user['org_id'])})
             if org:
+                user_data['org_name'] = org.get('name', 'Personal Workspace')
                 invite_code = org.get('invite_code')
                 if not invite_code:
                     import random
@@ -305,6 +322,8 @@ def get_profile(current_user):
                 user_data['invite_code'] = invite_code
         except Exception as e:
             print(f"Error fetching org invite code: {e}")
+    else:
+        user_data['org_name'] = "Personal Workspace"
     
     if user.get('delegation_id'):
         try:
@@ -316,6 +335,105 @@ def get_profile(current_user):
             user_data['delegation_name'] = "Invalid Delegation ID"
 
     return jsonify(user_data), 200
+
+
+@auth_bp.route('/profile', methods=['PUT'])
+@token_required
+def update_profile(current_user):
+    """
+    Update Current User Profile
+    ---
+    tags:
+      - Auth
+    security:
+      - BearerAuth: []
+    """
+    user_id = current_user.get('user_id')
+    data = request.get_json(force=True, silent=True) or {}
+
+    username = data.get('username')
+    profile_image = data.get('profile_image')
+    update_fields = {"updated_at": datetime.datetime.utcnow()}
+
+    if username is not None:
+        username = username.strip()
+        if not username:
+            return jsonify({"error": "Nama lengkap tidak boleh kosong"}), 400
+        u_error = _validate_username(username)
+        if u_error:
+            return jsonify({"error": u_error}), 400
+
+        existing_user = users_col.find_one({"username": username, "_id": {"$ne": ObjectId(user_id)}})
+        if existing_user:
+            return jsonify({"error": "Username already exists"}), 400
+        update_fields["username"] = username
+
+    if profile_image is not None:
+        update_fields["profile_image"] = profile_image.strip() if isinstance(profile_image, str) else profile_image
+
+    users_col.update_one({"_id": ObjectId(user_id)}, {"$set": update_fields})
+    updated_user = users_col.find_one({"_id": ObjectId(user_id)})
+
+    log_event(
+        "auth_service",
+        f"Profile updated for user: {updated_user.get('username', user_id)}",
+        user_id=user_id,
+        org_id=current_user.get('org_id'),
+        action="PROFILE_UPDATE"
+    )
+
+    return jsonify({
+        "message": "Profile updated successfully",
+        "user": {
+            "id": str(updated_user["_id"]),
+            "username": updated_user.get("username"),
+            "email": updated_user.get("email"),
+            "profile_image": updated_user.get("profile_image")
+        }
+    }), 200
+
+
+@auth_bp.route('/organization', methods=['PUT'])
+@token_required
+@role_required('owner')
+def update_organization(current_user):
+    """
+    Update Organization Name (Owner Only)
+    ---
+    tags:
+      - Enterprise
+    security:
+      - BearerAuth: []
+    """
+    org_id = current_user.get('org_id')
+    data = request.get_json(force=True, silent=True) or {}
+    name = data.get('name', '').strip()
+
+    if not org_id:
+        return jsonify({"error": "Organization not found"}), 404
+    if not name:
+        return jsonify({"error": "Nama organisasi tidak boleh kosong"}), 400
+
+    org_error = _validate_org_name(name)
+    if org_error:
+        return jsonify({"error": org_error}), 400
+
+    result = orgs_col.update_one(
+        {"_id": ObjectId(org_id)},
+        {"$set": {"name": name, "updated_at": datetime.datetime.utcnow()}}
+    )
+    if result.matched_count == 0:
+        return jsonify({"error": "Organization not found"}), 404
+
+    log_event(
+        "auth_service",
+        f"Organization renamed to {name}",
+        user_id=current_user.get('user_id'),
+        org_id=org_id,
+        action="ORGANIZATION_UPDATE"
+    )
+
+    return jsonify({"message": "Organization updated successfully", "org_name": name}), 200
 
 
 @auth_bp.route('/delegations', methods=['POST'])

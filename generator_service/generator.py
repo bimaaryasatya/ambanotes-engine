@@ -28,6 +28,7 @@ SURAT_TUGAS_TEMPLATE = """
         .content { margin-bottom: 20px; }
         .footer { margin-top: 50px; float: right; width: 300px; text-align: center; }
         .signature-img { max-width: 150px; margin: 10px 0; }
+        .sign-location { margin: 8px 0 4px; font-size: 14px; }
         .clear { clear: both; }
     </style>
 </head>
@@ -53,6 +54,9 @@ SURAT_TUGAS_TEMPLATE = """
 
     <div class="footer">
         <p>{{ city }}, {{ current_date }}</p>
+        {% if current_location_label %}
+            <p class="sign-location">{{ current_location_label }}</p>
+        {% endif %}
         <p>Hormat Kami,</p>
         {% if signature %}
             <img src="{{ signature }}" class="signature-img">
@@ -159,6 +163,7 @@ def generate_surat_tugas(current_user):
             task_description = f"Menghadiri dan berpartisipasi aktif dalam kegiatan '{ref_title}' yang diselenggarakan pada tanggal {date_str} pukul {time_str} berlokasi di {location_str}."
 
         city = data.get('city', 'Jakarta')
+        current_location_label = (data.get('current_location_label') or '').strip()
         
         if not doc_number or not task_description or not signatory_name:
             return jsonify({"error": "Missing required fields (doc_number/letter_number, task_description, signatory_name)"}), 400
@@ -207,7 +212,8 @@ def generate_surat_tugas(current_user):
             letterhead=letterhead_url,
             signature=signature_url,
             city=city,
-            current_date=datetime.date.today().strftime("%d %B %Y")
+            current_date=datetime.date.today().strftime("%d %B %Y"),
+            current_location_label=current_location_label
         )
 
         # 4. Generate Unique Hash for Anti-Fraud
