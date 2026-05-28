@@ -56,21 +56,6 @@ def _find_org_by_id(org_id):
         return None
 
 
-def _validate_org_name(name: str) -> str | None:
-    if len(name) < 3 or len(name) > 100:
-        return "Nama organisasi harus antara 3 dan 100 karakter"
-    return None
-
-
-def _find_org_by_id(org_id):
-    if not org_id:
-        return None
-    try:
-        return orgs_col.find_one({"_id": ObjectId(org_id) if isinstance(org_id, str) else org_id})
-    except Exception:
-        return None
-
-
 # --- Endpoints ---
 
 @auth_bp.route('/register', methods=['POST'])
@@ -455,6 +440,17 @@ def update_profile(current_user):
         if org:
             updated_org_name = org.get('name')
 
+    log_event(
+        "auth_service",
+        f"Profile updated for user: {updated_user.get('username', user_id)}",
+        user_id=user_id,
+        org_id=current_user.get('org_id'),
+        action="PROFILE_UPDATE",
+        audience="owner" if updated_user.get("role") == "owner" else "user",
+        visibility="app",
+        severity="info",
+    )
+
     return jsonify({
         "message": "Profile updated successfully",
         "user": {
@@ -469,11 +465,11 @@ def update_profile(current_user):
     }), 200
 
 
-@auth_bp.route('/profile', methods=['PUT'])
+@auth_bp.route('/activity-logs', methods=['GET'])
 @token_required
-def update_profile(current_user):
+def get_activity_logs(current_user):
     """
-    Update Current User Profile
+    Get Current User Activity Logs
     ---
     tags:
       - Auth
@@ -482,6 +478,12 @@ def update_profile(current_user):
     security:
       - BearerAuth: []
     parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
       - name: limit
         in: query
         type: integer
@@ -492,7 +494,6 @@ def update_profile(current_user):
         description: User activity logs
     """
     user_id = current_user.get('user_id')
-    org_id = current_user.get('org_id')
     limit = request.args.get('limit', default=50, type=int) or 50
     limit = max(1, min(limit, 200))
 
@@ -519,24 +520,20 @@ def update_profile(current_user):
                 "metadata": item.get("metadata", {}),
                 "timestamp": item.get("timestamp").isoformat() if item.get("timestamp") else None,
             })
-
-    log_event(
-        "auth_service",
-        f"Profile updated for user: {updated_user.get('username', user_id)}",
-        user_id=user_id,
-        org_id=current_user.get('org_id'),
-        action="PROFILE_UPDATE"
-    )
-
-    return jsonify({
-        "message": "Profile updated successfully",
-        "user": {
-            "id": str(updated_user["_id"]),
-            "username": updated_user.get("username"),
-            "email": updated_user.get("email"),
-            "profile_image": updated_user.get("profile_image")
-        }
-    }), 200
+        return jsonify(result), 200
+    except Exception as e:
+        log_event(
+            "auth_service",
+            f"Failed to fetch activity logs for user: {user_id}",
+            user_id=user_id,
+            org_id=current_user.get('org_id'),
+            action="ACTIVITY_LOGS_FETCH_FAILED",
+            metadata={"error": str(e)},
+            audience="developer",
+            visibility="internal",
+            severity="error",
+        )
+        return jsonify({"error": "Failed to fetch activity logs"}), 500
 
 
 @auth_bp.route('/organization', methods=['PUT'])
