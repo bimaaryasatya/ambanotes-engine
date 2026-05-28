@@ -41,6 +41,36 @@ def _validate_username(username: str) -> str | None:
     return None
 
 
+def _validate_org_name(name: str) -> str | None:
+    if len(name) < 3 or len(name) > 100:
+        return "Nama organisasi harus antara 3 dan 100 karakter"
+    return None
+
+
+def _find_org_by_id(org_id):
+    if not org_id:
+        return None
+    try:
+        return orgs_col.find_one({"_id": ObjectId(org_id) if isinstance(org_id, str) else org_id})
+    except Exception:
+        return None
+
+
+def _validate_org_name(name: str) -> str | None:
+    if len(name) < 3 or len(name) > 100:
+        return "Nama organisasi harus antara 3 dan 100 karakter"
+    return None
+
+
+def _find_org_by_id(org_id):
+    if not org_id:
+        return None
+    try:
+        return orgs_col.find_one({"_id": ObjectId(org_id) if isinstance(org_id, str) else org_id})
+    except Exception:
+        return None
+
+
 # --- Endpoints ---
 
 @auth_bp.route('/register', methods=['POST'])
@@ -325,6 +355,8 @@ def get_profile(current_user):
                 user_data['invite_code'] = invite_code
         except Exception as e:
             print(f"Error fetching org invite code: {e}")
+    else:
+        user_data['org_name'] = "Personal Workspace"
     
     if user.get('delegation_id'):
         try:
@@ -437,11 +469,11 @@ def update_profile(current_user):
     }), 200
 
 
-@auth_bp.route('/activity-logs', methods=['GET'])
+@auth_bp.route('/profile', methods=['PUT'])
 @token_required
-def get_activity_logs(current_user):
+def update_profile(current_user):
     """
-    Get Current User Activity Logs
+    Update Current User Profile
     ---
     tags:
       - Auth
@@ -488,27 +520,66 @@ def get_activity_logs(current_user):
                 "timestamp": item.get("timestamp").isoformat() if item.get("timestamp") else None,
             })
 
-        log_event(
-            "auth_service",
-            f"Activity logs requested by {current_user.get('username')}",
-            org_id=org_id,
-            action="ACTIVITY_LOGS_VIEWED",
-            metadata={"limit": limit, "viewer_user_id": user_id},
-            audience="developer",
-            visibility="dashboard",
-            severity="info",
-        )
-        return jsonify(result), 200
-    except Exception as e:
-        log_event(
-            "auth_service",
-            f"Failed to fetch activity logs: {str(e)}",
-            user_id=user_id,
-            org_id=org_id,
-            action="ACTIVITY_LOGS_FAILED",
-            metadata={"error": str(e)},
-        )
-        return jsonify({"error": "Failed to fetch activity logs"}), 500
+    log_event(
+        "auth_service",
+        f"Profile updated for user: {updated_user.get('username', user_id)}",
+        user_id=user_id,
+        org_id=current_user.get('org_id'),
+        action="PROFILE_UPDATE"
+    )
+
+    return jsonify({
+        "message": "Profile updated successfully",
+        "user": {
+            "id": str(updated_user["_id"]),
+            "username": updated_user.get("username"),
+            "email": updated_user.get("email"),
+            "profile_image": updated_user.get("profile_image")
+        }
+    }), 200
+
+
+@auth_bp.route('/organization', methods=['PUT'])
+@token_required
+@role_required('owner')
+def update_organization(current_user):
+    """
+    Update Organization Name (Owner Only)
+    ---
+    tags:
+      - Enterprise
+    security:
+      - BearerAuth: []
+    """
+    org_id = current_user.get('org_id')
+    data = request.get_json(force=True, silent=True) or {}
+    name = data.get('name', '').strip()
+
+    if not org_id:
+        return jsonify({"error": "Organization not found"}), 404
+    if not name:
+        return jsonify({"error": "Nama organisasi tidak boleh kosong"}), 400
+
+    org_error = _validate_org_name(name)
+    if org_error:
+        return jsonify({"error": org_error}), 400
+
+    result = orgs_col.update_one(
+        {"_id": ObjectId(org_id)},
+        {"$set": {"name": name, "updated_at": datetime.datetime.utcnow()}}
+    )
+    if result.matched_count == 0:
+        return jsonify({"error": "Organization not found"}), 404
+
+    log_event(
+        "auth_service",
+        f"Organization renamed to {name}",
+        user_id=current_user.get('user_id'),
+        org_id=org_id,
+        action="ORGANIZATION_UPDATE"
+    )
+
+    return jsonify({"message": "Organization updated successfully", "org_name": name}), 200
 
 
 @auth_bp.route('/delegations', methods=['POST'])
@@ -1567,3 +1638,4 @@ def google_callback():
 @auth_bp.route('/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "healthy", "service": "auth_service"}), 200
+

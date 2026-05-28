@@ -74,13 +74,12 @@ SURAT_TUGAS_TEMPLATE = """
         body { font-family: "Times New Roman", Times, serif; line-height: 1.65; margin: 36px; color: #111; }
         .kop-surat { text-align: center; border-bottom: 3px solid black; padding-bottom: 12px; margin-bottom: 24px; }
         .kop-img { max-width: 100%; height: auto; }
-        .title { text-align: center; text-decoration: underline; font-weight: bold; font-size: 20px; margin-bottom: 4px; }
-        .nomor { text-align: center; margin-bottom: 26px; }
-        .content { margin-bottom: 18px; text-align: left; }
-        .details-table { width: 100%; margin-left: 20px; border-collapse: collapse; margin-bottom: 16px; }
-        .details-table td { padding: 4px 0; vertical-align: top; text-align: left; }
-        .footer { margin-top: 52px; float: right; width: 280px; text-align: center; }
-        .signature-img { max-width: 150px; max-height: 90px; margin: 10px 0; }
+        .title { text-align: center; text-decoration: underline; font-weight: bold; font-size: 18px; margin-bottom: 5px; }
+        .nomor { text-align: center; margin-bottom: 30px; }
+        .content { margin-bottom: 20px; }
+        .footer { margin-top: 50px; float: right; width: 300px; text-align: center; }
+        .signature-img { max-width: 150px; margin: 10px 0; }
+        .sign-location { margin: 8px 0 4px; font-size: 14px; }
         .clear { clear: both; }
     </style>
 </head>
@@ -133,6 +132,10 @@ SURAT_TUGAS_TEMPLATE = """
 
     <div class="footer">
         <p>{{ city }}, {{ current_date }}</p>
+        {% if current_location_label %}
+            <p class="sign-location">{{ current_location_label }}</p>
+        {% endif %}
+        <p>Hormat Kami,</p>
         {% if signature %}
             <img src="{{ signature }}" class="signature-img">
         {% else %}
