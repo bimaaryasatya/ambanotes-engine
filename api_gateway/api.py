@@ -4,7 +4,7 @@ import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template_string
 from flask_cors import CORS
 from flasgger import Swagger
 from common.logger import log_event
@@ -19,7 +19,11 @@ from auth_service.auth_service import auth_bp
 from document_service.document_service import document_bp
 from notification_service.notif import notification_bp
 from ai_service.ai_service import ai_bp
-from generator_service.generator import generator_bp
+from generator_service.generator import (
+    generator_bp,
+    build_verification_result,
+    PUBLIC_VERIFY_TEMPLATE,
+)
 
 app = Flask(__name__)
 CORS(app)
@@ -97,6 +101,20 @@ def health_check():
     """
     log_event("api_gateway", "Gateway health check requested", action="HEALTH_CHECK")
     return jsonify({"status": "healthy", "service": "api_gateway"}), 200
+
+
+@app.route('/verify/<doc_hash>', methods=['GET'])
+def public_verify_document(doc_hash):
+    result = build_verification_result(doc_hash)
+    status_code = 200 if result["valid"] else 404
+    return render_template_string(PUBLIC_VERIFY_TEMPLATE, **result), status_code
+
+
+@app.route('/verify/<doc_hash>/json', methods=['GET'])
+def public_verify_document_json(doc_hash):
+    result = build_verification_result(doc_hash)
+    status_code = 200 if result["valid"] else 404
+    return jsonify(result), status_code
 
 if __name__ == '__main__':
     log_event("api_gateway", "Starting Unified API Gateway", action="GATEWAY_START")

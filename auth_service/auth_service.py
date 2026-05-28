@@ -303,13 +303,15 @@ def get_profile(current_user):
         "role": user.get('role', 'member'),
         "org_id": user.get('org_id'),
         "delegation_id": user.get('delegation_id'),
-        "google_drive_connected": user.get('google_drive_connected', False)
+        "google_drive_connected": user.get('google_drive_connected', False),
+        "profile_image_data": user.get('profile_image_data'),
     }
     
     if user.get('org_id'):
         try:
             org = orgs_col.find_one({"_id": ObjectId(user['org_id'])})
             if org:
+                user_data['org_name'] = org.get('name') or "Personal Workspace"
                 invite_code = org.get('invite_code')
                 if not invite_code:
                     import random
@@ -334,6 +336,105 @@ def get_profile(current_user):
             user_data['delegation_name'] = "Invalid Delegation ID"
 
     return jsonify(user_data), 200
+
+
+@auth_bp.route('/profile', methods=['PUT'])
+@token_required
+def update_profile(current_user):
+    """
+    Update Current User Profile
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            username:
+              type: string
+            profile_image_data:
+              type: string
+            org_name:
+              type: string
+    responses:
+      200:
+        description: Profile updated successfully
+    """
+    user_id = current_user.get('user_id')
+    data = request.get_json(force=True, silent=True) or {}
+
+    try:
+        user = users_col.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        return jsonify({"error": "Invalid user ID in token"}), 400
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    update_fields = {}
+    username = (data.get('username') or '').strip()
+    profile_image_data = data.get('profile_image_data')
+    org_name = (data.get('org_name') or '').strip()
+
+    if username:
+        u_error = _validate_username(username)
+        if u_error:
+            return jsonify({"error": u_error}), 400
+
+        existing_user = users_col.find_one({
+            "username": username,
+            "_id": {"$ne": user["_id"]},
+        })
+        if existing_user:
+            return jsonify({"error": "Username already exists"}), 400
+        update_fields["username"] = username
+
+    if profile_image_data is not None:
+        update_fields["profile_image_data"] = profile_image_data
+
+    if update_fields:
+        users_col.update_one({"_id": user["_id"]}, {"$set": update_fields})
+
+    if org_name:
+        if current_user.get('role') != 'owner':
+            return jsonify({"error": "Only organization owner can rename the organization"}), 403
+        if len(org_name) < 3 or len(org_name) > 80:
+            return jsonify({"error": "Organization name must be between 3 and 80 characters"}), 400
+        if not user.get('org_id'):
+            return jsonify({"error": "Organization not found for current user"}), 404
+        orgs_col.update_one(
+            {"_id": ObjectId(user['org_id'])},
+            {"$set": {"name": org_name}}
+        )
+
+    updated_user = users_col.find_one({"_id": user["_id"]}) or user
+    updated_org_name = None
+    if updated_user.get('org_id'):
+        org = orgs_col.find_one({"_id": ObjectId(updated_user['org_id'])})
+        if org:
+            updated_org_name = org.get('name')
+
+    return jsonify({
+        "message": "Profile updated successfully",
+        "user": {
+            "id": str(updated_user["_id"]),
+            "username": updated_user.get("username", ""),
+            "email": updated_user.get("email", ""),
+            "role": updated_user.get("role", "member"),
+            "org_id": updated_user.get("org_id"),
+            "org_name": updated_org_name,
+            "profile_image_data": updated_user.get("profile_image_data"),
+        }
+    }), 200
 
 
 @auth_bp.route('/activity-logs', methods=['GET'])

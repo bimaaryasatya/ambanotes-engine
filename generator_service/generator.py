@@ -8,6 +8,7 @@ import base64
 import hashlib
 import datetime
 import requests
+import qrcode
 from bson import ObjectId
 from PIL import Image, ImageDraw, ImageFont
 
@@ -19,8 +20,50 @@ from common.logger import log_event
 from common.jwt_utils import token_required, role_required
 from common.db import users_col, delegations_col, assets_col, docs_col, orgs_col
 from common.google_drive_client import upload_file_to_google_drive
+from common.config import Config
 
 generator_bp = Blueprint('generator', __name__)
+
+PUBLIC_VERIFY_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Verifikasi Dokumen</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f5f7fb; color: #172033; margin: 0; padding: 24px; }
+        .card { max-width: 760px; margin: 40px auto; background: #fff; border-radius: 18px; box-shadow: 0 20px 50px rgba(18, 28, 45, 0.12); padding: 28px; }
+        .badge { display: inline-block; padding: 8px 14px; border-radius: 999px; font-weight: 700; margin-bottom: 18px; }
+        .ok { background: #e6f7ee; color: #146c43; }
+        .bad { background: #fdecec; color: #b42318; }
+        h1 { margin: 0 0 12px; font-size: 28px; }
+        p { line-height: 1.6; }
+        .meta { margin-top: 22px; border-top: 1px solid #e5e7eb; padding-top: 18px; }
+        .meta-row { margin: 10px 0; }
+        .label { font-weight: 700; }
+        .hash { margin-top: 22px; font-family: Consolas, monospace; color: #475467; word-break: break-all; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="badge {{ 'ok' if valid else 'bad' }}">{{ 'VALID' if valid else 'TIDAK VALID' }}</div>
+        <h1>{{ title }}</h1>
+        <p>{{ message }}</p>
+        {% if valid %}
+        <div class="meta">
+            <div class="meta-row"><span class="label">Jenis dokumen:</span> {{ details.doc_type }}</div>
+            <div class="meta-row"><span class="label">Nomor surat:</span> {{ details.doc_number }}</div>
+            <div class="meta-row"><span class="label">Organisasi:</span> {{ details.org_name }}</div>
+            <div class="meta-row"><span class="label">Tanggal terbit:</span> {{ details.created_at }}</div>
+            <div class="meta-row"><span class="label">Dokumen ID:</span> {{ details.doc_id }}</div>
+        </div>
+        {% endif %}
+        <div class="hash">Verification ID: {{ doc_hash }}</div>
+    </div>
+</body>
+</html>
+"""
 
 
 SURAT_TUGAS_TEMPLATE = """
@@ -132,6 +175,31 @@ def _sanitize_filename_component(value):
     cleaned = re.sub(r'[^A-Za-z0-9._-]+', '_', (value or '').strip())
     cleaned = cleaned.strip('._')
     return cleaned or 'surat_tugas'
+
+
+def _get_public_base_url():
+    return (Config.PUBLIC_BASE_URL or Config.GATEWAY_URL or "http://localhost:5009").rstrip("/")
+
+
+def _build_verification_hash(doc_id):
+    seed = f"{doc_id}:{datetime.datetime.utcnow().timestamp()}:{uuid.uuid4().hex}"
+    return hashlib.sha256(seed.encode()).hexdigest()[:24]
+
+
+def _build_verification_url(doc_hash):
+    return f"{_get_public_base_url()}/verify/{doc_hash}"
+
+
+def _build_verification_qr(url):
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=8,
+        border=1,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+    return qr.make_image(fill_color="black", back_color="white").convert("RGB")
 
 
 def _find_user(user_id):
@@ -294,6 +362,7 @@ def _render_assignment_pdf_bytes(payload, letterhead_image, signature_image):
     body_font = _get_font(28, bold=False)
     body_bold_font = _get_font(28, bold=True)
     small_font = _get_font(24, bold=False)
+    verify_font = _get_font(16, bold=False)
 
     if letterhead_image:
         max_header_height = 230
@@ -369,10 +438,17 @@ def _render_assignment_pdf_bytes(payload, letterhead_image, signature_image):
     cursor_y = _draw_wrapped_paragraph(draw, task_intro, body_font, margin_x, cursor_y, usable_width)
     cursor_y += 36
 
+    # Reserve space for the verification footer so it never overlaps body content.
+    verification_footer_height = 140
+    footer_limit_y = page_height - verification_footer_height - 40
+
     # 4. Closing
     closing = "Demikian surat tugas ini dibuat sebagaimana mestinya dan untuk dapat dipergunakan seperlunya."
     cursor_y = _draw_wrapped_paragraph(draw, closing, body_font, margin_x, cursor_y, usable_width)
     cursor_y += 80
+
+    if cursor_y > footer_limit_y:
+        cursor_y = footer_limit_y
 
     footer_x = page_width - 420
     draw.text((footer_x, cursor_y), f"{payload['city']}, {payload['current_date']}", font=small_font, fill=(0, 0, 0))
@@ -389,6 +465,36 @@ def _render_assignment_pdf_bytes(payload, letterhead_image, signature_image):
         cursor_y += resized.height + 24
     else:
         cursor_y += 110
+
+    verification_hash = payload.get("verification_hash")
+    verification_url = payload.get("verification_url")
+    if verification_hash and verification_url:
+        qr_image = _build_verification_qr(verification_url).resize((110, 110))
+        verify_y = page_height - 126
+        qr_x = page_width - margin_x - qr_image.width
+        text_right_padding = 26
+        text_max_width = qr_x - margin_x - text_right_padding
+
+        draw.line((margin_x, verify_y - 14, page_width - margin_x, verify_y - 14), fill=(185, 185, 185), width=1)
+        page.paste(qr_image, (qr_x, verify_y))
+
+        draw.text(
+            (margin_x, verify_y),
+            f"Verification ID: {verification_hash}",
+            font=verify_font,
+            fill=(90, 90, 90),
+        )
+        url_lines = _wrap_text(draw, f"Verify: {verification_url}", verify_font, text_max_width)
+        line_height = draw.textbbox((0, 0), "Ag", font=verify_font)[3] + 6
+        url_y = verify_y + 24
+        for line in url_lines[:3]:
+            draw.text((margin_x, url_y), line, font=verify_font, fill=(90, 90, 90))
+            url_y += line_height
+
+        qr_label = "Scan to verify"
+        qr_label_box = draw.textbbox((0, 0), qr_label, font=verify_font)
+        qr_label_x = qr_x + (qr_image.width - (qr_label_box[2] - qr_label_box[0])) / 2
+        draw.text((qr_label_x, verify_y + qr_image.height + 4), qr_label, font=verify_font, fill=(90, 90, 90))
 
     pdf_buffer = io.BytesIO()
     page.save(pdf_buffer, format="PDF", resolution=150.0)
@@ -603,6 +709,42 @@ def _upload_pdf_to_owner_drive(org_id, pdf_bytes, filename):
     )
 
 
+def get_verification_document(doc_hash):
+    return docs_col.find_one({"verification_hash": doc_hash})
+
+
+def build_verification_result(doc_hash):
+    doc = get_verification_document(doc_hash)
+    if not doc:
+        return {
+            "valid": False,
+            "title": "Dokumen tidak terverifikasi",
+            "message": "Verification ID tidak ditemukan. Dokumen ini bisa jadi bukan hasil terbitan resmi AmbaNotes.",
+            "doc_hash": doc_hash,
+            "details": None,
+        }
+
+    generated_data = doc.get("generated_data") or {}
+    entities = doc.get("entities") or {}
+    created_at = doc.get("approved_at") or doc.get("created_at")
+    created_at_value = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
+    org = _find_org(doc.get("org_id"))
+
+    return {
+        "valid": True,
+        "title": "Dokumen asli dan terdaftar",
+        "message": "Dokumen ini cocok dengan catatan verifikasi resmi di server AmbaNotes.",
+        "doc_hash": doc_hash,
+        "details": {
+            "doc_id": doc.get("doc_id"),
+            "doc_type": doc.get("generator_type", "document").replace("_", " ").title(),
+            "doc_number": generated_data.get("doc_number") or entities.get("nomor_surat") or "-",
+            "org_name": (org or {}).get("name", "Organisasi tidak diketahui"),
+            "created_at": created_at_value,
+        },
+    }
+
+
 def _finalize_generated_document(doc, approver):
     org_id = approver.get('org_id')
     generated_data = dict(doc.get('generated_data') or {})
@@ -626,14 +768,15 @@ def _finalize_generated_document(doc, approver):
     if not payload['doc_number']:
         raise Exception("Nomor surat tugas belum tersedia pada request ini.")
 
+    verification_hash = _build_verification_hash(doc['doc_id'])
+    verification_url = _build_verification_url(verification_hash)
+    payload["verification_hash"] = verification_hash
+    payload["verification_url"] = verification_url
+
     letterhead_image = _load_image_from_value(payload['letterhead_value'])
     signature_image = _load_image_from_value(payload['signature_value'])
     pdf_bytes = _render_assignment_pdf_bytes(payload, letterhead_image, signature_image)
     drive_data = _upload_pdf_to_owner_drive(org_id, pdf_bytes, doc['filename'])
-
-    verification_hash = hashlib.sha256(
-        f"{doc['doc_id']}{datetime.datetime.utcnow().timestamp()}".encode()
-    ).hexdigest()[:16]
 
     update_data = {
         "content": payload['task_description'],
@@ -643,6 +786,7 @@ def _finalize_generated_document(doc, approver):
         "google_drive": drive_data,
         "file_data": None,
         "verification_hash": verification_hash,
+        "verification_url": verification_url,
         "approved_by": approver.get('user_id'),
         "approved_by_name": approver.get('username'),
         "approved_at": datetime.datetime.utcnow(),
@@ -661,6 +805,8 @@ def _finalize_generated_document(doc, approver):
             "location": payload['location'],
             "city": payload['city'],
             "task_description": payload['task_description'],
+            "verification_hash": verification_hash,
+            "verification_url": verification_url,
         },
         "entities": {
             "dates": [payload['date']] if payload['date'] else [],
@@ -722,6 +868,7 @@ def generate_surat_tugas(current_user):
                 "html": finalized.get("html_content"),
                 "google_drive": finalized.get("google_drive"),
                 "verification_hash": finalized.get("verification_hash"),
+                "verification_url": finalized.get("verification_url"),
             }), 201
 
         pending_record = _build_doc_record(doc_id, payload, current_user, requester, 'pending_approval')
@@ -808,6 +955,7 @@ def approve_surat_tugas(current_user, doc_id):
             "status": "processed",
             "google_drive": finalized.get("google_drive"),
             "verification_hash": finalized.get("verification_hash"),
+            "verification_url": finalized.get("verification_url"),
         }), 200
     except Exception as e:
         log_event(
@@ -823,22 +971,16 @@ def approve_surat_tugas(current_user, doc_id):
 
 @generator_bp.route('/verify/<doc_hash>', methods=['GET'])
 def verify_document(doc_hash):
-    doc = docs_col.find_one({"verification_hash": doc_hash})
-    if not doc:
-        return jsonify({"valid": False, "message": "Document hash not found. This might be a forgery."}), 404
+    result = build_verification_result(doc_hash)
+    status_code = 200 if result["valid"] else 404
+    return jsonify(result), status_code
 
-    created_at = doc.get('created_at')
-    created_at_value = created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at)
 
-    return jsonify({
-        "valid": True,
-        "message": "Document is AUTHENTIC",
-        "details": {
-            "doc_id": doc['doc_id'],
-            "org_id": doc['org_id'],
-            "created_at": created_at_value,
-        }
-    }), 200
+@generator_bp.route('/verify/<doc_hash>/page', methods=['GET'])
+def verify_document_page(doc_hash):
+    result = build_verification_result(doc_hash)
+    status_code = 200 if result["valid"] else 404
+    return render_template_string(PUBLIC_VERIFY_TEMPLATE, **result), status_code
 
 
 @generator_bp.route('/health', methods=['GET'])

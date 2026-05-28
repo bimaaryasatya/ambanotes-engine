@@ -3,21 +3,46 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import request, jsonify
 from common.config import Config
+import secrets
+
+
+def _get_jwt_secret():
+    secret = Config.JWT_SECRET_KEY or ""
+    if len(secret) < 32:
+        raise ValueError(
+            "JWT_SECRET_KEY must be at least 32 characters long for secure JWT signing"
+        )
+    return secret
 
 
 def generate_token(user):
+    now = datetime.utcnow()
     payload = {
         "user_id": str(user["_id"]),
         "username": user["username"],
         "role": user["role"],
         "org_id": user.get("org_id"),
-        "exp": datetime.utcnow() + timedelta(hours=8)
+        "iss": Config.JWT_ISSUER,
+        "aud": Config.JWT_AUDIENCE,
+        "iat": now,
+        "nbf": now,
+        "jti": secrets.token_hex(16),
+        "exp": now + timedelta(hours=Config.JWT_EXP_HOURS),
     }
-    return jwt.encode(payload, Config.JWT_SECRET_KEY, algorithm="HS256")
+    return jwt.encode(payload, _get_jwt_secret(), algorithm=Config.JWT_ALGORITHM)
 
 
 def verify_token(token):
-    return jwt.decode(token, Config.JWT_SECRET_KEY, algorithms=["HS256"])
+    return jwt.decode(
+        token,
+        _get_jwt_secret(),
+        algorithms=[Config.JWT_ALGORITHM],
+        issuer=Config.JWT_ISSUER,
+        audience=Config.JWT_AUDIENCE,
+        options={
+            "require": ["exp", "iat", "nbf", "iss", "aud", "jti", "user_id"],
+        },
+    )
 
 
 def token_required(f):
@@ -35,9 +60,7 @@ def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
-        # Debug: log the auth header received
-        print(f"[AUTH DEBUG] Authorization header: '{auth_header[:50]}...' (len={len(auth_header)})")
-        
+
         if not auth_header:
             return jsonify({"error": "Authorization header missing"}), 401
 
@@ -48,8 +71,16 @@ def token_required(f):
             token = auth_header
         try:
             payload = verify_token(token)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 500
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "Token has expired"}), 401
+        except jwt.InvalidAudienceError:
+            return jsonify({"error": "Invalid token audience"}), 401
+        except jwt.InvalidIssuerError:
+            return jsonify({"error": "Invalid token issuer"}), 401
+        except jwt.MissingRequiredClaimError as e:
+            return jsonify({"error": f"Missing token claim: {e.claim}"}), 401
         except jwt.InvalidTokenError:
             return jsonify({"error": "Invalid token"}), 401
 

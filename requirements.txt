@@ -43,6 +43,7 @@ google-generativeai
 referencing==0.37.0
 regex==2026.5.9
 requests==2.34.1
+qrcode==8.2
 rich==15.0.0
 rpds-py==0.30.0
 safetensors==0.7.0
