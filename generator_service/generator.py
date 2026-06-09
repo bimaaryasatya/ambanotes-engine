@@ -914,10 +914,10 @@ def generate_surat_tugas(current_user):
             org_id=current_user.get('org_id'),
             action="GENERATE_SURAT_TUGAS_ERROR",
             metadata={"error": error_details},
+            severity="error",
         )
         return jsonify({
-            "error": "Internal Server Error during Surat Tugas generation",
-            "details": str(e),
+            "error": "Internal Server Error during Surat Tugas generation"
         }), 500
 
 
@@ -968,8 +968,9 @@ def approve_surat_tugas(current_user, doc_id):
             org_id=org_id,
             action="SURAT_TUGAS_REQUEST_APPROVE_FAILED",
             metadata={"doc_id": doc_id, "error": str(e)},
+            severity="error",
         )
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to approve Surat Tugas request"}), 500
 
 
 @generator_bp.route('/verify/<doc_hash>', methods=['GET'])

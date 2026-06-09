@@ -935,7 +935,8 @@ def delete_asset(current_user, asset_id):
                   user_id=current_user.get('user_id'), org_id=org_id, action="ASSET_DELETE")
         return jsonify({"message": "Asset deleted successfully"}), 200
     except Exception as e:
-        return jsonify({"error": "Invalid asset ID", "details": str(e)}), 400
+        log_event("auth_service", f"Invalid asset ID for deletion: {str(e)}", org_id=org_id, severity="error")
+        return jsonify({"error": "Invalid asset ID"}), 400
 
 
 @auth_bp.route('/assets/<asset_id>', methods=['PUT'])
@@ -1023,7 +1024,8 @@ def update_asset(current_user, asset_id):
                   user_id=current_user.get('user_id'), org_id=org_id, action="ASSET_UPDATE")
         return jsonify({"message": "Asset updated successfully"}), 200
     except Exception as e:
-        return jsonify({"error": "Invalid asset ID", "details": str(e)}), 400
+        log_event("auth_service", f"Invalid asset ID for update: {str(e)}", org_id=org_id, severity="error")
+        return jsonify({"error": "Invalid asset ID"}), 400
 
 
 @auth_bp.route('/delegations/<delegation_id>', methods=['PUT'])
@@ -1052,7 +1054,8 @@ def update_delegation(current_user, delegation_id):
                   user_id=current_user.get('user_id'), org_id=org_id, action="DELEGATION_RENAME")
         return jsonify({"message": "Delegation name updated successfully"}), 200
     except Exception as e:
-        return jsonify({"error": "Invalid delegation ID format", "details": str(e)}), 400
+        log_event("auth_service", f"Invalid delegation ID for update: {str(e)}", org_id=org_id, severity="error")
+        return jsonify({"error": "Invalid delegation ID format"}), 400
 
 
 @auth_bp.route('/delegations/<delegation_id>', methods=['DELETE'])
@@ -1082,7 +1085,8 @@ def delete_delegation(current_user, delegation_id):
                   user_id=current_user.get('user_id'), org_id=org_id, action="DELEGATION_DELETE")
         return jsonify({"message": "Delegation deleted successfully and members migrated to general"}), 200
     except Exception as e:
-        return jsonify({"error": "Invalid delegation ID format", "details": str(e)}), 400
+        log_event("auth_service", f"Invalid delegation ID for deletion: {str(e)}", org_id=org_id, severity="error")
+        return jsonify({"error": "Invalid delegation ID format"}), 400
 
 
 @auth_bp.route('/members', methods=['GET'])
@@ -1141,7 +1145,8 @@ def list_members(current_user):
             })
         return jsonify(member_list), 200
     except Exception as e:
-        return jsonify({"error": f"Failed to retrieve members: {str(e)}"}), 500
+        log_event("auth_service", f"Failed to retrieve members: {str(e)}", org_id=org_id, severity="error")
+        return jsonify({"error": "Failed to retrieve members"}), 500
 
 
 @auth_bp.route('/invite', methods=['POST'])
@@ -1493,8 +1498,8 @@ def google_disconnect(current_user):
         )
         return jsonify({"message": "Google Drive berhasil diputuskan."}), 200
     except Exception as e:
-        log_event("auth_service", f"Gagal memutuskan Google Drive: {str(e)}", user_id=user_id, action="GOOGLE_DRIVE_DISCONNECT_FAILED")
-        return jsonify({"error": f"Gagal memutuskan koneksi: {str(e)}"}), 500
+        log_event("auth_service", f"Gagal memutuskan Google Drive: {str(e)}", user_id=user_id, action="GOOGLE_DRIVE_DISCONNECT_FAILED", severity="error")
+        return jsonify({"error": "Gagal memutuskan koneksi Google Drive"}), 500
 
 
 @auth_bp.route('/google/connect', methods=['GET'])
@@ -1628,8 +1633,8 @@ def google_callback():
         """, 200
         
     except Exception as e:
-        log_event("auth_service", f"Error sewaktu Google Callback: {str(e)}", user_id=user_id, action="GOOGLE_CALLBACK_ERROR")
-        return f"<h3>Terjadi kesalahan sistem: {str(e)}</h3>", 500
+        log_event("auth_service", f"Error sewaktu Google Callback: {str(e)}", user_id=user_id, action="GOOGLE_CALLBACK_ERROR", severity="error")
+        return "<h3>Terjadi kesalahan sistem sewaktu Google Drive callback</h3>", 500
 
 
 @auth_bp.route('/health', methods=['GET'])

@@ -172,8 +172,8 @@ def predict(current_user):
 
     except Exception as e:
         log_event("classification_service", f"Prediction error ({model_type}): {str(e)}",
-                  user_id=user_id, org_id=org_id, action="CLASS_PREDICT_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": str(e)}), 500
+                  user_id=user_id, org_id=org_id, action="CLASS_PREDICT_FAILED", metadata={"error": str(e)}, severity="error")
+        return jsonify({"error": "Failed to predict document class"}), 500
 
 
 @classification_bp.route('/health', methods=['GET'])

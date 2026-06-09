@@ -177,8 +177,8 @@ def upload_document(current_user):
         extracted_text = ocr_res.json().get("text", "")
     except Exception as e:
         log_event("document_service", f"OCR request failed: {str(e)}", 
-                  user_id=user_id, org_id=org_id, action="DOC_OCR_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": f"OCR failed: {str(e)}"}), 500
+                  user_id=user_id, org_id=org_id, action="DOC_OCR_FAILED", metadata={"error": str(e)}, severity="error")
+        return jsonify({"error": "OCR failed"}), 500
 
     classification, entities = process_ai_pipeline(extracted_text)
 
@@ -397,7 +397,9 @@ def disposition_document(current_user, doc_id):
         return jsonify({"message": f"Document successfully dispositioned to {delegation['name']}"}), 200
 
     except Exception as e:
-        return jsonify({"error": f"Failed to disposition document: {str(e)}"}), 500
+        log_event("document_service", f"Failed to disposition document: {str(e)}",
+                  user_id=current_user.get("user_id"), org_id=org_id, action="DOC_DISPOSITION_FAILED", severity="error")
+        return jsonify({"error": "Failed to disposition document"}), 500
 
 
 @document_bp.route('/<path:doc_id>', methods=['DELETE'])
@@ -594,8 +596,8 @@ def replace_document(current_user, doc_id):
             new_text = ocr_res.json().get("text", "")
         except Exception as e:
             log_event("document_service", f"OCR request failed during replace: {str(e)}",
-                      user_id=user_id, org_id=org_id, action="DOC_REPLACE_OCR_FAILED")
-            return jsonify({"error": f"OCR failed: {str(e)}"}), 500
+                      user_id=user_id, org_id=org_id, action="DOC_REPLACE_OCR_FAILED", severity="error")
+            return jsonify({"error": "OCR failed"}), 500
     elif request.form.get("text"):
         new_text = request.form.get("text")
     elif request.get_json(force=True, silent=True) and request.get_json(force=True, silent=True).get("text"):
@@ -747,9 +749,10 @@ def download_document(current_user, doc_id):
             "document_service",
             f"Download document failed: {str(e)}",
             org_id=org_id,
-            action="DOC_DOWNLOAD_FAILED"
+            action="DOC_DOWNLOAD_FAILED",
+            severity="error"
         )
-        return jsonify({"error": f"Download failed: {str(e)}"}), 500
+        return jsonify({"error": "Download failed"}), 500
 
 @document_bp.route('/migrate-to-drive', methods=['POST'])
 def migrate_to_drive():

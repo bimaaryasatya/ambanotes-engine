@@ -103,8 +103,8 @@ def summarize(current_user):
 
     except Exception as e:
         log_event("ai_service", f"Summarization error: {str(e)}",
-                  user_id=user_id, org_id=org_id, action="AI_SUMMARIZE_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": str(e)}), 500
+                  user_id=user_id, org_id=org_id, action="AI_SUMMARIZE_FAILED", metadata={"error": str(e)}, severity="error")
+        return jsonify({"error": "Failed to summarize text"}), 500
 
 
 @ai_bp.route("/chat", methods=["POST"])
@@ -202,8 +202,8 @@ def chat(current_user):
 
     except Exception as e:
         log_event("ai_service", f"Chat error: {str(e)}",
-                  user_id=user_id, org_id=org_id, action="AI_CHAT_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": str(e)}), 500
+                  user_id=user_id, org_id=org_id, action="AI_CHAT_FAILED", metadata={"error": str(e)}, severity="error")
+        return jsonify({"error": "Failed to generate chat response"}), 500
 
 
 @ai_bp.route("/chats", methods=["GET"])
@@ -500,8 +500,8 @@ def chat_global(current_user):
 
     except Exception as e:
         log_event("ai_service", f"Global Chat error: {str(e)}",
-                  user_id=user_id, org_id=org_id, action="AI_CHAT_GLOBAL_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": str(e)}), 500
+                  user_id=user_id, org_id=org_id, action="AI_CHAT_GLOBAL_FAILED", metadata={"error": str(e)}, severity="error")
+        return jsonify({"error": "Failed to generate global chat response"}), 500
 
 
 @ai_bp.route("/extract-tasks", methods=["POST"])
@@ -587,8 +587,8 @@ def extract_tasks(current_user):
         return jsonify(tasks), 200
 
     except Exception as e:
-        log_event("ai_service", f"Task extraction error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_EXTRACT_TASKS_FAILED")
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Task extraction error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_EXTRACT_TASKS_FAILED", severity="error")
+        return jsonify({"error": "Failed to extract tasks"}), 500
 
 
 @ai_bp.route("/generate-reply", methods=["POST"])
@@ -676,8 +676,8 @@ def generate_reply(current_user):
         return jsonify(replies), 200
 
     except Exception as e:
-        log_event("ai_service", f"Reply generation error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_GENERATE_REPLY_FAILED")
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Reply generation error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_GENERATE_REPLY_FAILED", severity="error")
+        return jsonify({"error": "Failed to generate reply drafts"}), 500
 
 
 @ai_bp.route("/translate", methods=["POST"])
@@ -743,8 +743,8 @@ def translate_text(current_user):
         return jsonify({"translated_text": translated}), 200
 
     except Exception as e:
-        log_event("ai_service", f"Translation error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_TRANSLATE_FAILED")
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Translation error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_TRANSLATE_FAILED", severity="error")
+        return jsonify({"error": "Failed to translate text"}), 500
 
 
 @ai_bp.route("/suggest-disposition", methods=["POST"])
@@ -835,7 +835,8 @@ def suggest_disposition(current_user):
         return jsonify(suggestion), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Disposition suggestion error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_SUGGEST_DISPOSITION_FAILED", severity="error")
+        return jsonify({"error": "Failed to generate disposition suggestion"}), 500
 
 
 @ai_bp.route("/redact-sensitive", methods=["POST"])
@@ -902,7 +903,8 @@ def redact_sensitive(current_user):
         return jsonify({"redacted_text": redacted}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Sensitive data redaction error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_REDACT_FAILED", severity="error")
+        return jsonify({"error": "Failed to redact sensitive data"}), 500
 
 
 @ai_bp.route("/semantic-search", methods=["POST"])
@@ -1003,7 +1005,8 @@ def semantic_search(current_user):
         return jsonify(results), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Semantic search error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_SEMANTIC_SEARCH_FAILED", severity="error")
+        return jsonify({"error": "Failed to perform semantic search"}), 500
 
 
 @ai_bp.route("/voice-intent", methods=["POST"])
@@ -1086,7 +1089,8 @@ def voice_intent(current_user):
         return jsonify(intent_data), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Voice intent extraction error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_VOICE_INTENT_FAILED", severity="error")
+        return jsonify({"error": "Failed to extract voice intent"}), 500
 
 
 @ai_bp.route("/analyze-workflow", methods=["POST"])
@@ -1160,7 +1164,8 @@ def analyze_workflow(current_user):
 
         return jsonify(analysis), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Workflow analysis error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_WORKFLOW_ANALYSIS_FAILED", severity="error")
+        return jsonify({"error": "Failed to analyze workflow"}), 500
 
 
 @ai_bp.route("/extract-budget", methods=["POST"])
@@ -1231,7 +1236,8 @@ def extract_budget(current_user):
 
         return jsonify(budget_data), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Budget extraction error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_EXTRACT_BUDGET_FAILED", severity="error")
+        return jsonify({"error": "Failed to extract budget data"}), 500
 
 
 @ai_bp.route("/analyze-priority", methods=["POST"])
@@ -1301,4 +1307,5 @@ def analyze_priority(current_user):
         log_event("ai_service", "Priority analysis completed", user_id=user_id, org_id=org_id, action="AI_PRIORITY_SUCCESS")
         return jsonify(analysis), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Priority analysis error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_PRIORITY_FAILED", severity="error")
+        return jsonify({"error": "Failed to analyze document priority"}), 500

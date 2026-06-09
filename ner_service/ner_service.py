@@ -211,8 +211,8 @@ def extract_entities(current_user):
         return jsonify(result), 200
     except Exception as e:
         log_event("ner_service", f"Extraction failed (local): {str(e)}",
-                  user_id=user_id, org_id=org_id, action="NER_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": str(e)}), 500
+                  user_id=user_id, org_id=org_id, action="NER_FAILED", metadata={"error": str(e)}, severity="error")
+        return jsonify({"error": "Extraction failed"}), 500
 
 
 @ner_bp.route('/health', methods=['GET'])

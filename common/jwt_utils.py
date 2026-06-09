@@ -72,7 +72,9 @@ def token_required(f):
         try:
             payload = verify_token(token)
         except ValueError as e:
-            return jsonify({"error": str(e)}), 500
+            from common.logger import log_event
+            log_event("jwt_utils", f"JWT Secret Key configuration validation failed: {str(e)}", severity="error")
+            return jsonify({"error": "Authentication system misconfigured"}), 500
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "Token has expired"}), 401
         except jwt.InvalidAudienceError:

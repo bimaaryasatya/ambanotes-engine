@@ -76,5 +76,5 @@ def extract_text(current_user):
         return jsonify({"text": text.strip()}), 200
     except Exception as e:
         log_event("ocr_service", f"OCR Failed (Gemini): {str(e)}",
-                  user_id=user_id, org_id=org_id, action="OCR_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": f"OCR processing failed: {str(e)}"}), 500
+                  user_id=user_id, org_id=org_id, action="OCR_FAILED", metadata={"error": str(e)}, severity="error")
+        return jsonify({"error": "OCR processing failed"}), 500

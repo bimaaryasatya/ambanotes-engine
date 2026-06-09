@@ -74,8 +74,8 @@ def insights(current_user):
         return jsonify(data), 200
     except Exception as e:
         log_event("insight_service", f"Failed to generate insights: {str(e)}",
-                  user_id=user_id, org_id=org_id, action="INSIGHTS_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": str(e)}), 500
+                  user_id=user_id, org_id=org_id, action="INSIGHTS_FAILED", metadata={"error": str(e)}, severity="error")
+        return jsonify({"error": "Failed to generate insights"}), 500
 
 
 @insight_bp.route("/weekly-summary", methods=["GET"])
@@ -141,8 +141,8 @@ def weekly_summary(current_user):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        log_event("insight_service", f"Weekly summary error: {str(e)}", user_id=user_id, org_id=org_id, action="WEEKLY_SUMMARY_FAILED")
-        return jsonify({"error": str(e)}), 500
+        log_event("insight_service", f"Weekly summary error: {str(e)}", user_id=user_id, org_id=org_id, action="WEEKLY_SUMMARY_FAILED", severity="error")
+        return jsonify({"error": "Failed to generate weekly summary"}), 500
 
 
 @insight_bp.route("/predictive-trends", methods=["GET"])

@@ -97,6 +97,7 @@ def recent_notifications(current_user):
             org_id=org_id,
             action="NOTIFICATIONS_FAILED",
             metadata={"error": str(e)},
+            severity="error",
         )
         return jsonify({"error": "Failed to fetch notifications"}), 500
 
