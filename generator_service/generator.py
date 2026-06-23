@@ -656,6 +656,7 @@ def _build_doc_record(doc_id, payload, current_user, requester, status):
     return {
         "doc_id": doc_id,
         "filename": filename,
+        "title": f"Surat Tugas {payload['doc_number']}".strip(),
         "content": payload['task_description'],
         "summary": payload['task_description'],
         "status": status,

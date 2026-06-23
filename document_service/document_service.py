@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 
 # Add parent directory to path so we can import from common
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -67,7 +68,55 @@ def _serialize_doc(doc):
     delegation_id = doc.get("delegation_id") or "general"
     doc["delegation_id"] = delegation_id
     doc["delegation_name"] = _get_delegation_name(delegation_id, doc.get("org_id"))
+    if not doc.get("title"):
+        doc["title"] = doc.get("filename")
     return doc
+
+
+def generate_document_title(extracted_text, filename):
+    """
+    Menghasilkan judul pendek (3-6 kata) berdasarkan isi surat untuk nama card surat.
+    """
+    if not extracted_text or not extracted_text.strip():
+        return os.path.splitext(filename)[0]
+
+    prompt = (
+        "Tugas Anda: Buatlah satu judul/nama singkat yang sangat jelas dan formal (maksimal 5 kata) "
+        "untuk dokumen/surat berdasarkan teks hasil OCR berikut ini. Judul ini akan digunakan sebagai nama card surat di aplikasi.\n"
+        "Aturan:\n"
+        "1. JANGAN gunakan tanda kutip, emoji, kata 'Judul:', atau penjelasan tambahan.\n"
+        "2. Ambil inti perihal surat tersebut (misal: 'Undangan Rapat Koordinasi', 'Surat Perjanjian Kerja', 'Pengumuman Libur Bersama').\n"
+        "3. Berikan langsung judulnya.\n\n"
+        f"Teks Surat:\n{extracted_text}"
+    )
+
+    try:
+        api_key = Config.MISTRAL_API_KEY
+        if not api_key:
+            return os.path.splitext(filename)[0]
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": "mistral-small-latest",
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.3
+        }
+
+        response = requests.post("https://api.mistral.ai/v1/chat/completions", json=payload, headers=headers, timeout=5)
+        if response.status_code == 200:
+            title = response.json()["choices"][0]["message"]["content"].strip()
+            title = re.sub(r'^["\'`*:]+|["\'`*:]+$', '', title).strip()
+            return title
+    except Exception as e:
+        log_event("document_service", f"Gagal generate title via Mistral: {str(e)}", action="MISTRAL_TITLE_ERROR")
+
+    return os.path.splitext(filename)[0]
 
 
 def generate_security_suggestion(doc_data):
@@ -228,9 +277,11 @@ def upload_document(current_user):
         file_data_b64 = base64.b64encode(file.stream.read()).decode("utf-8")
 
     doc_id = uuid.uuid4().hex
+    title = generate_document_title(extracted_text, file.filename)
     doc_data = {
         "doc_id": doc_id,
         "filename": file.filename,
+        "title": title,
         "content": extracted_text,
         "classification": classification,
         "entities": entities,
@@ -607,9 +658,11 @@ def replace_document(current_user, doc_id):
         return jsonify({"error": "Either a file or text must be provided"}), 400
 
     classification, entities = process_ai_pipeline(new_text)
+    new_title = generate_document_title(new_text, new_filename)
 
     update_data = {
         "filename": new_filename,
+        "title": new_title,
         "content": new_text,
         "classification": classification,
         "entities": entities,
@@ -630,6 +683,7 @@ def replace_document(current_user, doc_id):
         "message": "Document updated and re-processed",
         "doc_id": doc_id,
         "filename": new_filename,
+        "title": new_title,
         "classification": classification,
         "entities": entities
     }), 200
