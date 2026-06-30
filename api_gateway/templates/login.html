@@ -10,6 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -329,7 +331,12 @@
                     throw new Error(data.error || 'Gagal mengatur ulang sandi');
                 }
 
-                alert('Kata sandi berhasil diatur ulang! Silakan login kembali.');
+                await Swal.fire({
+                    title: 'Sukses',
+                    text: 'Kata sandi berhasil diatur ulang! Silakan login kembali.',
+                    icon: 'success',
+                    confirmButtonColor: '#2563eb'
+                });
                 closeForgotModal();
             } catch (err) {
                 showModalError(err.message);

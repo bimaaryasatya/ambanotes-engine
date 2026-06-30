@@ -10,6 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -533,6 +535,16 @@
     <script>
         lucide.createIcons();
 
+        // SWEETALERT HELPER
+        function showAlert(title, text, icon) {
+            return Swal.fire({
+                title: title,
+                text: text,
+                icon: icon,
+                confirmButtonColor: '#2563eb'
+            });
+        }
+
         // STATE VARIABLES
         let activeTab = 'analytics';
         let allDocuments = [];
@@ -1039,16 +1051,16 @@
                 });
 
                 if (res.ok) {
-                    alert("Disposisi surat berhasil didelegasikan!");
+                    await showAlert("Sukses", "Disposisi surat berhasil didelegasikan!", "success");
                     closeWorkspaceModal();
                     await loadData();
                 } else {
                     const errData = await res.json();
-                    alert(`Gagal disposisi: ${errData.error}`);
+                    await showAlert("Gagal", `Gagal disposisi: ${errData.error}`, "error");
                 }
             } catch (err) {
                 console.error("Disposisi error:", err);
-                alert("Kesalahan koneksi.");
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
             } finally {
                 btn.disabled = false;
                 btn.textContent = "Delegasikan";
@@ -1248,7 +1260,18 @@
             const newDivId = selectElem.value;
             if (!newDivId) return;
 
-            if (!confirm("Apakah Anda yakin ingin memindahkan pegawai ini ke unit divisi terpilih?")) {
+            const result = await Swal.fire({
+                title: 'Konfirmasi Mutasi',
+                text: 'Apakah Anda yakin ingin memindahkan pegawai ini ke unit divisi terpilih?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#2563eb',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Ya, Pindahkan',
+                cancelButtonText: 'Batal'
+            });
+
+            if (!result.isConfirmed) {
                 selectElem.value = '';
                 return;
             }
@@ -1264,16 +1287,17 @@
                 });
 
                 if (res.ok) {
-                    alert("Staf berhasil dimutasi divisi!");
+                    await showAlert("Sukses", "Staf berhasil dimutasi divisi!", "success");
                     await loadData();
                 } else {
                     const err = await res.json();
-                    alert(`Gagal mutasi: ${err.error}`);
+                    await showAlert("Gagal", `Gagal mutasi: ${err.error}`, "error");
                     selectElem.value = '';
                 }
 
             } catch (err) {
                 console.error("Mutation error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
             }
         }
 
@@ -1303,32 +1327,44 @@
                     });
 
                     if (res.ok) {
-                        alert("Aset berhasil diunggah!");
+                        await showAlert("Sukses", "Aset berhasil diunggah!", "success");
                         fileInput.value = '';
                         await loadOrganizationAssets();
                     } else {
                         const err = await res.json();
-                        alert(`Gagal mengunggah aset: ${err.error}`);
+                        await showAlert("Gagal", `Gagal mengunggah aset: ${err.error}`, "error");
                     }
                 } catch (err) {
                     console.error("Asset upload error:", err);
+                    await showAlert("Gagal", "Kesalahan koneksi.", "error");
                 }
             };
         });
 
         async function executeDeleteAsset(assetId) {
-            if (!confirm("Hapus aset ini secara permanen dari server?")) return;
+            const result = await Swal.fire({
+                title: 'Hapus Aset?',
+                text: 'Hapus aset ini secara permanen dari server?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Ya, Hapus',
+                cancelButtonText: 'Batal'
+            });
+            if (!result.isConfirmed) return;
 
             try {
                 const res = await fetch(`/auth/assets/${assetId}`, { method: 'DELETE' });
                 if (res.ok) {
-                    alert("Aset berhasil dihapus!");
+                    await showAlert("Sukses", "Aset berhasil dihapus!", "success");
                     await loadOrganizationAssets();
                 } else {
-                    alert("Gagal menghapus aset.");
+                    await showAlert("Gagal", "Gagal menghapus aset.", "error");
                 }
             } catch (err) {
                 console.error("Delete asset error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
             }
         }
 
@@ -1346,14 +1382,15 @@
                 });
 
                 if (res.ok) {
-                    alert("Email undangan berhasil dikirim lewat SMTP!");
+                    await showAlert("Sukses", "Email undangan berhasil dikirim lewat SMTP!", "success");
                     document.getElementById('invite-email').value = '';
                 } else {
                     const err = await res.json();
-                    alert(`Gagal mengundang anggota: ${err.error}`);
+                    await showAlert("Gagal", `Gagal mengundang anggota: ${err.error}`, "error");
                 }
             } catch (err) {
                 console.error("Invite member error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
             }
         });
 
@@ -1379,31 +1416,43 @@
                 });
 
                 if (res.ok) {
-                    alert("Divisi baru berhasil dibentuk!");
+                    await showAlert("Sukses", "Divisi baru berhasil dibentuk!", "success");
                     closeNewDivisionModal();
                     await loadData();
                 } else {
                     const err = await res.json();
-                    alert(`Gagal membentuk divisi: ${err.error}`);
+                    await showAlert("Gagal", `Gagal membentuk divisi: ${err.error}`, "error");
                 }
             } catch (err) {
                 console.error("Create division error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
             }
         }
 
         async function executeDeleteDivision(divId) {
-            if (!confirm("Apakah Anda yakin ingin menghapus divisi ini? Semua staf divisi akan otomatis terelokasi ke Umum.")) return;
+            const result = await Swal.fire({
+                title: 'Hapus Divisi?',
+                text: 'Apakah Anda yakin ingin menghapus divisi ini? Semua staf divisi akan otomatis terelokasi ke Umum.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Ya, Hapus',
+                cancelButtonText: 'Batal'
+            });
+            if (!result.isConfirmed) return;
 
             try {
                 const res = await fetch(`/auth/delegations/${divId}`, { method: 'DELETE' });
                 if (res.ok) {
-                    alert("Divisi berhasil dihapus!");
+                    await showAlert("Sukses", "Divisi berhasil dihapus!", "success");
                     await loadData();
                 } else {
-                    alert("Gagal menghapus divisi.");
+                    await showAlert("Gagal", "Gagal menghapus divisi.", "error");
                 }
             } catch (err) {
                 console.error("Delete division error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
             }
         }
 
@@ -1453,7 +1502,7 @@
 
                 const data = await res.json();
                 if (res.ok) {
-                    alert('Kata sandi berhasil diubah!');
+                    await showAlert('Sukses', 'Kata sandi berhasil diubah!', 'success');
                     closeChangePasswordModal();
                 } else {
                     alertDiv.textContent = data.error || 'Gagal mengubah kata sandi.';
