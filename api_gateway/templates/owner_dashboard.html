@@ -14,9 +14,236 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Quill Rich Text Editor -->
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class'
+        }
+    </script>
+    <script>
+        // Immediately apply theme before HTML renders to prevent white flash
+        (function() {
+            const savedTheme = localStorage.getItem('theme-preference') || 'system';
+            let actualTheme = savedTheme;
+            if (savedTheme === 'system') {
+                actualTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            if (actualTheme === 'dark') {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        })();
+    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        /* Dark Theme Global Rules */
+        .dark body {
+            background-color: #0b0f19 !important; /* Slate 950 */
+            color: #f1f5f9 !important;
+        }
+        .dark aside {
+            background-color: #0f172a !important; /* Slate 900 */
+            border-color: #1e293b !important;
+        }
+        .dark aside nav button {
+            color: #94a3b8 !important;
+        }
+        .dark aside nav button:hover {
+            background-color: #1e293b !important;
+            color: #f1f5f9 !important;
+        }
+        .dark .active-tab {
+            background-color: #1e293b !important;
+            color: #60a5fa !important;
+            border-left-color: #3b82f6 !important;
+        }
+        .dark aside div.bg-slate-50 {
+            background-color: #1e293b !important;
+            border-color: #1e293b !important;
+        }
+        .dark aside div.bg-slate-50 h4 {
+            color: #f1f5f9 !important;
+        }
+        .dark aside div.bg-slate-50 button, .dark aside div.bg-slate-50 a {
+            background-color: #0f172a !important;
+            border-color: #1e293b !important;
+            color: #94a3b8 !important;
+        }
+        .dark aside div.bg-slate-50 button:hover, .dark aside div.bg-slate-50 a:hover {
+            background-color: #1e293b !important;
+            color: #f1f5f9 !important;
+        }
+        
+        .dark header {
+            background-color: #0f172a !important;
+            border-color: #1e293b !important;
+        }
+        .dark header h2 {
+            color: #ffffff !important;
+        }
+        .dark header p {
+            color: #94a3b8 !important;
+        }
+        .dark header input[type="date"] {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f1f5f9 !important;
+        }
+        .dark header button.border-slate-300 {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f1f5f9 !important;
+        }
+        .dark header button.border-slate-300:hover {
+            background-color: #334155 !important;
+        }
+
+        /* Cards and sections */
+        .dark .bg-white {
+            background-color: #0f172a !important;
+            border-color: #1e293b !important;
+            color: #f1f5f9 !important;
+        }
+        .dark .bg-white input, .dark .bg-white select, .dark .bg-white textarea {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f1f5f9 !important;
+        }
+        .dark .bg-white input::placeholder {
+            color: #64748b !important;
+        }
+        .dark .bg-white select option {
+            background-color: #0f172a !important;
+            color: #f1f5f9 !important;
+        }
+        .dark .bg-white select option:hover {
+            background-color: #1e293b !important;
+        }
+
+        /* Responsive Slate text overrides for dark mode */
+        .dark .text-slate-900 { color: #f1f5f9 !important; }
+        .dark .text-slate-800 { color: #e2e8f0 !important; }
+        .dark .text-slate-700 { color: #cbd5e1 !important; }
+        .dark .text-slate-600 { color: #cbd5e1 !important; }
+        .dark .text-slate-500 { color: #94a3b8 !important; }
+        .dark .text-slate-400 { color: #64748b !important; }
+
+        /* Tables dark styling */
+        .dark thead {
+            background-color: #1e293b !important;
+            border-bottom-color: #334155 !important;
+        }
+        .dark th {
+            color: #94a3b8 !important;
+            border-color: #1e293b !important;
+        }
+        .dark td {
+            border-color: #1e293b !important;
+        }
+        .dark tr:hover {
+            background-color: #1e293b !important;
+        }
+        .dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+            border-color: #1e293b !important;
+        }
+        .dark .border-slate-200, .dark .border-slate-100 {
+            border-color: #1e293b !important;
+        }
+
+        /* Clickable and active colors */
+        .dark .text-blue-600 { color: #60a5fa !important; }
+        .dark .text-blue-600:hover { color: #93c5fd !important; }
+        .dark .text-slate-600 { color: #cbd5e1 !important; }
+        .dark .text-slate-600:hover { color: #f1f5f9 !important; }
+        
+        /* Container background overrides */
+        .dark .bg-slate-50 {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+        }
+        
+        /* Badges overrides for dark theme */
+        .dark .bg-slate-100 { background-color: #1e293b !important; color: #94a3b8 !important; }
+        .dark .bg-slate-200 { background-color: #334155 !important; color: #cbd5e1 !important; }
+        .dark .bg-blue-100 { background-color: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important; }
+        .dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.2) !important; color: #f87171 !important; }
+        .dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.2) !important; color: #fbbf24 !important; }
+        .dark .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.2) !important; color: #34d399 !important; }
+        
+        .dark kbd {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #cbd5e1 !important;
+        }
+        
+        /* Modal dark theme styling */
+        .dark #workspaceModal > div {
+            background-color: #0f172a !important;
+            border-color: #1e293b !important;
+            color: #f1f5f9 !important;
+        }
+        .dark #workspaceModal h3, .dark #workspaceModal h4 {
+            color: #f1f5f9 !important;
+        }
+        .dark #workspaceModal div.bg-slate-50 {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+        }
+        .dark #workspaceModal div.bg-slate-50 h4 {
+            color: #cbd5e1 !important;
+        }
+        .dark #workspaceModal select {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f1f5f9 !important;
+        }
+        .dark #workspaceModal select option {
+            background-color: #0f172a !important;
+            color: #f1f5f9 !important;
+        }
+        .dark #changePasswordModal > div {
+            background-color: #0f172a !important;
+            border-color: #1e293b !important;
+            color: #f1f5f9 !important;
+        }
+        .dark #changePasswordModal input {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f1f5f9 !important;
+        }
+
+        /* KPI and stats text */
+        .dark #kpi-total-docs, .dark #kpi-in-docs, .dark #kpi-out-docs, .dark #kpi-weekly-avg {
+            color: #ffffff !important;
+        }
+
+        /* Quill WYSIWYG overrides for Dark Theme */
+        .dark #quill-editor-container .ql-toolbar {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+        }
+        .dark #quill-editor-container .ql-container {
+            background-color: #0f172a !important;
+            border-color: #334155 !important;
+        }
+        .dark #quill-editor-container .ql-editor {
+            color: #f1f5f9 !important;
+        }
+        .dark #quill-editor-container .ql-stroke {
+            stroke: #cbd5e1 !important;
+        }
+        .dark #quill-editor-container .ql-fill {
+            fill: #cbd5e1 !important;
+        }
+        .dark #quill-editor-container .ql-picker {
+            color: #cbd5e1 !important;
         }
         .active-tab {
             background-color: rgb(241 245 249);
@@ -36,6 +263,38 @@
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
+        }
+
+        /* Quill WYSIWYG overrides */
+        #quill-editor-container .ql-toolbar {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-bottom: none;
+            border-radius: 12px 12px 0 0;
+            padding: 8px 12px;
+        }
+        #quill-editor-container .ql-container {
+            border: 1px solid #e2e8f0;
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            background: #fff;
+        }
+        #quill-editor-container .ql-editor {
+            min-height: 460px;
+            max-height: 600px;
+            overflow-y: auto;
+            padding: 24px 32px;
+            line-height: 1.8;
+            color: #1e293b;
+        }
+        #quill-editor-container .ql-editor p,
+        #quill-editor-container .ql-editor div {
+            margin-bottom: 4px;
+        }
+        #quill-editor-container .ql-editor:focus {
+            outline: none;
         }
     </style>
 </head>
@@ -68,6 +327,14 @@
                 <button onclick="switchTab('organization')" id="nav-organization" class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
                     <i data-lucide="users" class="w-5 h-5"></i>
                     <span>Staf & Organisasi</span>
+                </button>
+                <button onclick="switchTab('logs')" id="nav-logs" class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+                    <i data-lucide="history" class="w-5 h-5"></i>
+                    <span>Log Aktivitas</span>
+                </button>
+                <button onclick="switchTab('templates')" id="nav-templates" class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+                    <i data-lucide="layout-template" class="w-5 h-5"></i>
+                    <span>Template Surat</span>
                 </button>
             </nav>
         </div>
@@ -103,18 +370,27 @@
                 <p id="page-subtitle" class="text-xs text-slate-500">Pantau beban kerja administrasi secara real-time</p>
             </div>
             
-            <!-- Date Filter Widget (Visible in Analytics Tab) -->
-            <div id="header-date-filter" class="flex items-center space-x-2">
-                <div class="inline-flex rounded-md shadow-sm">
-                    <button onclick="setDateRangePreset(7)" class="px-3 py-1.5 border border-slate-300 bg-white text-xs font-medium text-slate-700 rounded-l-lg hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">7 Hari</button>
-                    <button onclick="setDateRangePreset(30)" class="px-3 py-1.5 border-t border-b border-r border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">30 Hari</button>
-                    <button onclick="setDateRangePreset(90)" class="px-3 py-1.5 border-t border-b border-r border-slate-300 bg-white text-xs font-medium text-slate-700 rounded-r-lg hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">3 Bulan</button>
-                </div>
-                <div class="flex items-center space-x-1 text-slate-500 text-xs font-medium">
-                    <input type="date" id="filter-start-date" class="border border-slate-300 rounded px-2 py-1 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                    <span>s/d</span>
-                    <input type="date" id="filter-end-date" class="border border-slate-300 rounded px-2 py-1 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                    <button onclick="applyManualDateFilter()" class="bg-blue-600 text-white rounded px-2.5 py-1 hover:bg-blue-700 font-semibold transition-colors">Terapkan</button>
+            <div class="flex items-center space-x-3">
+                <!-- Theme Switcher Button -->
+                <button onclick="cycleTheme()" id="theme-toggle-btn"
+                    class="flex items-center space-x-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+                    <i data-lucide="monitor" class="w-4 h-4"></i>
+                    <span>Tema: Sistem</span>
+                </button>
+
+                <!-- Date Filter Widget (Visible in Analytics Tab) -->
+                <div id="header-date-filter" class="flex items-center space-x-2">
+                    <div class="inline-flex rounded-md shadow-sm">
+                        <button onclick="setDateRangePreset(7)" class="px-3 py-1.5 border border-slate-300 bg-white text-xs font-medium text-slate-700 rounded-l-lg hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">7 Hari</button>
+                        <button onclick="setDateRangePreset(30)" class="px-3 py-1.5 border-t border-b border-r border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">30 Hari</button>
+                        <button onclick="setDateRangePreset(90)" class="px-3 py-1.5 border-t border-b border-r border-slate-300 bg-white text-xs font-medium text-slate-700 rounded-r-lg hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">3 Bulan</button>
+                    </div>
+                    <div class="flex items-center space-x-1 text-slate-500 text-xs font-medium dark:text-slate-400">
+                        <input type="date" id="filter-start-date" class="border border-slate-300 rounded px-2 py-1 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                        <span>s/d</span>
+                        <input type="date" id="filter-end-date" class="border border-slate-300 rounded px-2 py-1 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                        <button onclick="applyManualDateFilter()" class="bg-blue-600 text-white rounded px-2.5 py-1 hover:bg-blue-700 font-semibold transition-colors">Terapkan</button>
+                    </div>
                 </div>
             </div>
         </header>
@@ -261,6 +537,34 @@
 
             <!-- TAB 3: STAFF & ORGANIZATION -->
             <section id="panel-organization" class="hidden space-y-8">
+                <!-- Organization Profile / Name Panel -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 dark:border-slate-800 dark:bg-slate-900">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between space-y-3 md:space-y-0">
+                        <div class="flex items-center space-x-3">
+                            <div class="p-2.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400 rounded-lg">
+                                <i data-lucide="building-2" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h3 id="org-display-name" class="font-bold text-slate-900 dark:text-slate-100 text-lg">Memuat Organisasi...</h3>
+                                <p class="text-xs text-slate-500 mt-0.5">Kelola nama profil institusi/perusahaan Anda</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-lg flex items-center space-x-1.5 border border-slate-200 dark:border-slate-700">
+                                <span>Invite Code:</span>
+                                <span id="org-display-invite-code" class="font-mono font-bold text-slate-700 dark:text-slate-300">...</span>
+                                <button onclick="copyInviteCode()" class="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors p-0.5 ml-1" title="Salin Invite Code">
+                                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </span>
+                            <button onclick="executeRenameOrganization()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-colors flex items-center space-x-1.5 shadow-sm">
+                                <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                                <span>Ubah Nama</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Enterprise grid -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <!-- Left: Divisions / Delegations CRUD -->
@@ -364,6 +668,62 @@
                         </div>
                     </div>
                 </div>
+            </section>
+
+            <!-- TAB 4: ACTIVITY LOGS -->
+            <section id="panel-logs" class="hidden space-y-6">
+                <!-- Logs Table Card -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs font-semibold uppercase">
+                                <tr>
+                                    <th class="p-4">Waktu</th>
+                                    <th class="p-4">Layanan</th>
+                                    <th class="p-4">Aktor</th>
+                                    <th class="p-4">Aktivitas</th>
+                                    <th class="p-4 text-center">Tindakan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logs-table-body" class="divide-y divide-slate-200">
+                                <tr>
+                                    <td colspan="5" class="p-8 text-center text-slate-500">Memuat log aktivitas...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 5: LETTER TEMPLATES -->
+            <section id="panel-templates" class="hidden space-y-5">
+
+                <!-- Header Row -->
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900">Editor Template Surat Tugas</h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Tulis konten surat seperti biasa — sistem otomatis menyesuaikan format HTML</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="resetTemplateToDefault()"
+                            class="flex items-center gap-1.5 px-3 py-2 border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 rounded-lg text-xs font-semibold transition-colors">
+                            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Reset Default
+                        </button>
+                        <button onclick="saveLetterTemplate()"
+                            class="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors">
+                            <i data-lucide="save" class="w-3.5 h-3.5"></i> Simpan Perubahan
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Rich Text Editor -->
+                <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden" id="quill-editor-container">
+                    <div id="quill-editor"></div>
+                </div>
+
+                <p class="text-xs text-slate-400 text-center">
+                    Tekan <kbd class="bg-slate-100 border border-slate-300 rounded px-1.5 py-0.5 font-mono text-[10px]">Ctrl+S</kbd> untuk menyimpan cepat &nbsp;·&nbsp; Konten dikonversi ke HTML oleh sistem secara otomatis
+                </p>
             </section>
 
         </div>
@@ -549,6 +909,7 @@
         let activeTab = 'analytics';
         let allDocuments = [];
         let allDivisions = [];
+        let currentOrganization = null;
         let activeDocId = null;
         let lineChartInstance = null;
         let doughnutChartInstance = null;
@@ -594,6 +955,16 @@
                 pageTitle.textContent = "Staf & Organisasi";
                 pageSubtitle.textContent = "Kelola struktur divisi, mutasi staf, dan aset digital";
                 dateFilter.classList.add('hidden');
+            } else if (tabId === 'logs') {
+                pageTitle.textContent = "Log Aktivitas";
+                pageSubtitle.textContent = "Catatan riwayat kegiatan operasional organisasi";
+                dateFilter.classList.add('hidden');
+                loadActivityLogs();
+            } else if (tabId === 'templates') {
+                pageTitle.textContent = "Template Surat";
+                pageSubtitle.textContent = "Kustomisasi HTML template surat tugas organisasi";
+                dateFilter.classList.add('hidden');
+                initTemplateEditor();
             }
         }
 
@@ -617,6 +988,9 @@
                 // Fetch Divisions
                 const divRes = await fetch('/auth/delegations');
                 allDivisions = await divRes.json();
+
+                // Fetch Organization Details
+                await loadOrganizationDetails();
 
                 // Build Division Dropdowns
                 const disposisiSelect = document.getElementById('modal-disposisi-select');
@@ -722,6 +1096,10 @@
                 lineChartInstance.destroy();
             }
 
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#94a3b8' : '#64748b';
+            const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+
             const ctx = document.getElementById('lineChart').getContext('2d');
             lineChartInstance = new Chart(ctx, {
                 type: 'line',
@@ -755,11 +1133,25 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
-                        x: { grid: { display: false } }
+                        y: { 
+                            beginAtZero: true, 
+                            grid: { color: gridColor },
+                            ticks: { color: textColor }
+                        },
+                        x: { 
+                            grid: { display: false },
+                            ticks: { color: textColor }
+                        }
                     },
                     plugins: {
-                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } }
+                        legend: { 
+                            position: 'top', 
+                            labels: { 
+                                boxWidth: 12, 
+                                font: { size: 11 },
+                                color: textColor
+                            } 
+                        }
                     }
                 }
             });
@@ -769,7 +1161,7 @@
             // Count classifications
             const categories = {};
             docs.forEach(d => {
-                const label = d.classification ? d.classification.label : 'Tidak Terklasifikasi';
+                const label = (d.classification && d.classification.label_name) || (d.classification && d.classification.label) || 'Tidak Terklasifikasi';
                 categories[label] = (categories[label] || 0) + 1;
             });
 
@@ -780,6 +1172,9 @@
                 doughnutChartInstance.destroy();
             }
 
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#94a3b8' : '#64748b';
+
             if (labels.length === 0) {
                 // Renders placeholder if empty
                 const ctx = document.getElementById('doughnutChart').getContext('2d');
@@ -787,9 +1182,17 @@
                     type: 'doughnut',
                     data: {
                         labels: ['Tidak Ada Data'],
-                        datasets: [{ data: [1], backgroundColor: ['#f1f5f9'] }]
+                        datasets: [{ data: [1], backgroundColor: [isDark ? '#1e293b' : '#f1f5f9'] }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false }
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                labels: { color: textColor }
+                            }
+                        }
+                    }
                 });
                 return;
             }
@@ -814,7 +1217,14 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }
+                        legend: { 
+                            position: 'bottom', 
+                            labels: { 
+                                boxWidth: 12, 
+                                font: { size: 10 },
+                                color: textColor
+                            } 
+                        }
                     }
                 }
             });
@@ -888,11 +1298,11 @@
                 const date = new Date(doc.uploaded_at).toLocaleDateString('id-ID', {
                     day: 'numeric', month: 'short', year: 'numeric'
                 });
-                const type = doc.classification ? doc.classification.label : 'Tidak Terklasifikasi';
+                const type = doc.classification ? (doc.classification.label_name || doc.classification.label) : 'Tidak Terklasifikasi';
                 const division = doc.delegation_name || 'Umum (General)';
 
                 tbody.innerHTML += `
-                    <tr class="hover:bg-slate-50">
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                         <td class="p-4 font-semibold text-slate-900">${doc.title || doc.filename}</td>
                         <td class="p-4 text-slate-500">${date}</td>
                         <td class="p-4">
@@ -1165,9 +1575,13 @@
             } else {
                 allDivisions.forEach(d => {
                     divList.innerHTML += `
-                        <li class="py-3 text-sm flex justify-between items-center">
-                            <span class="font-semibold text-slate-800">${d.name}</span>
-                            <button onclick="executeDeleteDivision('${d._id}')" class="text-red-600 hover:text-red-800 text-xs font-bold">Hapus</button>
+                        <li class="py-3 text-sm flex justify-between items-center border-b border-slate-100 dark:border-slate-800/40 last:border-0">
+                            <span class="font-semibold text-slate-800 dark:text-slate-200">${d.name}</span>
+                            <div class="flex items-center space-x-2">
+                                <button onclick="executeRenameDivision('${d._id}', '${d.name}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold">Ubah Nama</button>
+                                <span class="text-slate-300 dark:text-slate-700 text-xs">|</span>
+                                <button onclick="executeDeleteDivision('${d._id}')" class="text-red-600 hover:text-red-800 text-xs font-bold">Hapus</button>
+                            </div>
                         </li>
                     `;
                 });
@@ -1233,19 +1647,33 @@
                     const typeLabel = a.type === 'letterhead' ? 'Kop Surat' : 'Tanda Tangan';
                     const divObj = allDivisions.find(d => d._id === a.delegation_id);
                     const divName = divObj ? divObj.name : 'Umum (General)';
+                    const isActive = a.is_active || false;
 
                     container.innerHTML += `
                         <div class="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
                             <div class="flex items-center space-x-3 overflow-hidden">
-                                <div class="w-12 h-12 bg-white rounded border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                <div onclick="showAssetPreview('${a.name}', '${a.image_data}')" 
+                                     class="w-12 h-12 bg-white rounded border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                                     title="Klik untuk memperbesar">
                                     <img src="data:image/png;base64,${a.image_data}" class="max-w-full max-h-full object-contain">
                                 </div>
                                 <div class="overflow-hidden">
-                                    <h5 class="text-xs font-bold text-slate-800 truncate">${typeLabel}</h5>
+                                    <div class="flex items-center space-x-2">
+                                        <h5 class="text-xs font-bold text-slate-800 truncate">${typeLabel}: ${a.name}</h5>
+                                        <span class="px-1.5 py-0.5 text-[9px] font-bold rounded ${isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}">
+                                            ${isActive ? 'Aktif' : 'Nonaktif'}
+                                        </span>
+                                    </div>
                                     <span class="text-[10px] text-slate-500 truncate block">${divName}</span>
                                 </div>
                             </div>
-                            <button onclick="executeDeleteAsset('${a._id}')" class="text-red-600 hover:text-red-800 text-xs font-bold">Hapus</button>
+                            <div class="flex items-center space-x-2 flex-shrink-0">
+                                <button onclick="toggleAssetActivation('${a.id}', ${isActive})" class="text-xs font-bold ${isActive ? 'text-slate-500 hover:text-slate-700' : 'text-blue-600 hover:text-blue-800'}">
+                                    ${isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                                </button>
+                                <span class="text-slate-300 text-xs">|</span>
+                                <button onclick="executeDeleteAsset('${a.id}')" class="text-red-600 hover:text-red-800 text-xs font-bold">Hapus</button>
+                            </div>
                         </div>
                     `;
                 });
@@ -1253,6 +1681,19 @@
             } catch (err) {
                 console.error("Load assets error:", err);
             }
+        }
+
+        function showAssetPreview(name, base64Data) {
+            Swal.fire({
+                title: name,
+                imageUrl: `data:image/png;base64,${base64Data}`,
+                imageAlt: name,
+                imageWidth: 320,
+                confirmButtonColor: '#3b82f6',
+                confirmButtonText: 'Tutup',
+                background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
+                color: document.documentElement.classList.contains('dark') ? '#f1f5f9' : '#0f172a',
+            });
         }
 
         // Mutation Execute
@@ -1368,6 +1809,27 @@
             }
         }
 
+        async function toggleAssetActivation(assetId, currentActive) {
+            const newActiveStatus = !currentActive;
+            try {
+                const res = await fetch(`/auth/assets/${assetId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_active: newActiveStatus })
+                });
+                if (res.ok) {
+                    await showAlert("Sukses", `Status aktif aset berhasil diperbarui!`, "success");
+                    await loadOrganizationAssets();
+                } else {
+                    const err = await res.json();
+                    await showAlert("Gagal", `Gagal mengubah status aktif aset: ${err.error}`, "error");
+                }
+            } catch (err) {
+                console.error("Toggle asset status error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
+            }
+        }
+
         // Invite Submit
         document.getElementById('invite-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -1426,6 +1888,138 @@
             } catch (err) {
                 console.error("Create division error:", err);
                 await showAlert("Gagal", "Kesalahan koneksi.", "error");
+            }
+        }
+
+        async function executeRenameDivision(divId, currentName) {
+            const isDark = document.documentElement.classList.contains('dark');
+            const { value: newName } = await Swal.fire({
+                title: 'Ubah Nama Divisi',
+                input: 'text',
+                inputLabel: 'Nama Divisi Baru',
+                inputValue: currentName,
+                showCancelButton: true,
+                confirmButtonColor: '#3b82f6',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Simpan',
+                cancelButtonText: 'Batal',
+                background: isDark ? '#0f172a' : '#ffffff',
+                color: isDark ? '#f1f5f9' : '#0f172a',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Nama divisi tidak boleh kosong!';
+                    }
+                }
+            });
+
+            if (newName && newName.trim() !== currentName) {
+                try {
+                    const res = await fetch(`/auth/delegations/${divId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: newName.trim() })
+                    });
+                    if (res.ok) {
+                        await showAlert("Sukses", "Nama divisi berhasil diperbarui!", "success");
+                        await loadData();
+                    } else {
+                        const err = await res.json();
+                        await showAlert("Gagal", `Gagal mengubah nama: ${err.error}`, "error");
+                    }
+                } catch (err) {
+                    console.error("Rename division error:", err);
+                    await showAlert("Gagal", "Kesalahan koneksi.", "error");
+                }
+            }
+        }
+
+        async function loadOrganizationDetails() {
+            try {
+                const res = await fetch('/auth/organization');
+                if (res.ok) {
+                    currentOrganization = await res.json();
+                    document.getElementById('org-display-name').textContent = currentOrganization.name || 'Organisasi Tanpa Nama';
+                    document.getElementById('org-display-invite-code').textContent = currentOrganization.invite_code || '-';
+                } else {
+                    document.getElementById('org-display-name').textContent = 'Gagal Memuat Organisasi';
+                }
+            } catch (err) {
+                console.error("Load organization details error:", err);
+                document.getElementById('org-display-name').textContent = 'Gagal Memuat Organisasi';
+            }
+        }
+
+        async function executeRenameOrganization() {
+            if (!currentOrganization) return;
+            const isDark = document.documentElement.classList.contains('dark');
+            const { value: newName } = await Swal.fire({
+                title: 'Ubah Nama Organisasi',
+                input: 'text',
+                inputLabel: 'Nama Organisasi Baru',
+                inputValue: currentOrganization.name || '',
+                showCancelButton: true,
+                confirmButtonColor: '#3b82f6',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Simpan',
+                cancelButtonText: 'Batal',
+                background: isDark ? '#0f172a' : '#ffffff',
+                color: isDark ? '#f1f5f9' : '#0f172a',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Nama organisasi tidak boleh kosong!';
+                    }
+                }
+            });
+
+            if (newName && newName.trim() !== currentOrganization.name) {
+                try {
+                    const res = await fetch('/auth/organization', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: newName.trim() })
+                    });
+                    if (res.ok) {
+                        await showAlert("Sukses", "Nama organisasi berhasil diperbarui!", "success");
+                        await loadOrganizationDetails();
+                    } else {
+                        const err = await res.json();
+                        await showAlert("Gagal", `Gagal mengubah nama organisasi: ${err.error}`, "error");
+                    }
+                } catch (err) {
+                    console.error("Rename organization error:", err);
+                    await showAlert("Gagal", "Kesalahan koneksi.", "error");
+                }
+            }
+        }
+
+        async function copyInviteCode() {
+            const inviteCodeElement = document.getElementById('org-display-invite-code');
+            const code = inviteCodeElement.textContent.trim();
+            if (!code || code === '...' || code === '-') return;
+            
+            try {
+                await navigator.clipboard.writeText(code);
+                const isDark = document.documentElement.classList.contains('dark');
+                const Toast = Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 2000,
+                    timerProgressBar: true,
+                    background: isDark ? '#0f172a' : '#ffffff',
+                    color: isDark ? '#f1f5f9' : '#0f172a',
+                    didOpen: (toast) => {
+                        toast.addEventListener('mouseenter', Swal.stopTimer)
+                        toast.addEventListener('mouseleave', Swal.resumeTimer)
+                    }
+                });
+                Toast.fire({
+                    icon: 'success',
+                    title: 'Invite Code berhasil disalin!'
+                });
+            } catch (err) {
+                console.error('Failed to copy invite code: ', err);
+                await showAlert("Gagal", "Gagal menyalin invite code.", "error");
             }
         }
 
@@ -1517,6 +2111,239 @@
                 btn.textContent = 'Ganti Sandi';
             }
         }
+        async function loadActivityLogs() {
+            const tbody = document.getElementById('logs-table-body');
+            tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500">Memuat log aktivitas...</td></tr>';
+            try {
+                const res = await fetch('/auth/activity-logs?limit=100');
+                if (!res.ok) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-red-500">Gagal memuat log aktivitas.</td></tr>';
+                    return;
+                }
+                const logs = await res.json();
+                tbody.innerHTML = '';
+                if (logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500">Belum ada riwayat aktivitas.</td></tr>';
+                    return;
+                }
+                logs.forEach(l => {
+                    const dateStr = l.timestamp ? new Date(l.timestamp).toLocaleString('id-ID', {
+                        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                    }) : '-';
+                    const service = l.service ? l.service.toUpperCase() : '-';
+                    const user = l.username || l.user_id || 'System';
+                    const action = l.action || '-';
+                    const message = l.message || '';
+                    
+                    let badgeColor = 'bg-slate-100 text-slate-800';
+                    if (l.severity === 'error') badgeColor = 'bg-red-100 text-red-800';
+                    else if (l.severity === 'warning') badgeColor = 'bg-amber-100 text-amber-800';
+                    else if (l.severity === 'info') badgeColor = 'bg-emerald-100 text-emerald-800';
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50 border-b border-slate-100">
+                            <td class="p-4 text-xs font-medium text-slate-500">${dateStr}</td>
+                            <td class="p-4 text-xs font-semibold text-slate-700">${service}</td>
+                            <td class="p-4 text-xs text-slate-900 font-semibold">${user}</td>
+                            <td class="p-4 text-xs text-slate-600">${message}</td>
+                            <td class="p-4 text-center">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${badgeColor}">${action}</span>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (err) {
+                console.error("Load activity logs error:", err);
+                tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-red-500">Kesalahan koneksi.</td></tr>';
+            }
+        }
+
+        // ================= TEMPLATE EDITOR MODULE (CodeMirror) =================
+        // ================= TEMPLATE EDITOR MODULE (Quill WYSIWYG) =================
+        let quillEditor = null;
+
+        function initTemplateEditor() {
+            if (quillEditor) return; // already initialized
+
+            quillEditor = new Quill('#quill-editor', {
+                theme: 'snow',
+                placeholder: 'Mulai tulis konten surat tugas Anda di sini...\n\nGunakan tombol variabel di atas untuk menyisipkan data dinamis seperti nama organisasi, nomor surat, dll.',
+                modules: {
+                    toolbar: [
+                        [{ 'font': [] }, { 'size': ['small', false, 'large', 'huge'] }],
+                        ['bold', 'italic', 'underline', 'strike'],
+                        [{ 'color': [] }, { 'background': [] }],
+                        [{ 'align': [] }],
+                        [{ 'indent': '-1' }, { 'indent': '+1' }],
+                        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                        ['blockquote', 'code-block'],
+                        ['clean']
+                    ]
+                }
+            });
+
+            // Ctrl+S / Cmd+S to save
+            document.addEventListener('keydown', e => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                    const panel = document.getElementById('panel-templates');
+                    if (!panel.classList.contains('hidden')) {
+                        e.preventDefault();
+                        saveLetterTemplate();
+                    }
+                }
+            });
+
+            loadLetterTemplate();
+        }
+
+        async function loadLetterTemplate() {
+            if (!quillEditor) return;
+            quillEditor.enable(false);
+            quillEditor.setText('Memuat template dari server...');
+            try {
+                const res = await fetch('/generator/templates/surat_tugas');
+                if (res.ok) {
+                    const data = await res.json();
+                    // If the saved content is HTML, put it into the editor
+                    quillEditor.clipboard.dangerouslyPasteHTML(data.content || '');
+                } else {
+                    await showAlert('Gagal', 'Gagal memuat template surat.', 'error');
+                    quillEditor.setText('');
+                }
+            } catch (err) {
+                console.error('Load template error:', err);
+                await showAlert('Gagal', 'Kesalahan koneksi.', 'error');
+                quillEditor.setText('');
+            } finally {
+                quillEditor.enable(true);
+            }
+        }
+
+        async function saveLetterTemplate() {
+            if (!quillEditor) return;
+            // Get the formatted HTML from Quill's editor area
+            const content = quillEditor.root.innerHTML.trim();
+            if (!content || content === '<p><br></p>') {
+                await showAlert('Peringatan', 'Konten template tidak boleh kosong.', 'warning');
+                return;
+            }
+            try {
+                const res = await fetch('/generator/templates/surat_tugas', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                if (res.ok) {
+                    await showAlert('Sukses', 'Template surat tugas berhasil diperbarui!', 'success');
+                } else {
+                    const err = await res.json();
+                    await showAlert('Gagal', `Gagal menyimpan template: ${err.error}`, 'error');
+                }
+            } catch (err) {
+                console.error('Save template error:', err);
+                await showAlert('Gagal', 'Kesalahan koneksi.', 'error');
+            }
+        }
+
+        async function resetTemplateToDefault() {
+            const result = await Swal.fire({
+                title: 'Reset Template?',
+                text: 'Apakah Anda yakin ingin mereset template kembali ke bawaan sistem?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3b82f6',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Ya, Reset',
+                cancelButtonText: 'Batal'
+            });
+            if (!result.isConfirmed) return;
+            try {
+                const res = await fetch('/generator/templates/surat_tugas', { method: 'DELETE' });
+                if (res.ok) {
+                    await showAlert('Sukses', 'Template berhasil direset ke bawaan!', 'success');
+                    await loadLetterTemplate();
+                } else {
+                    await showAlert('Gagal', 'Gagal mereset template.', 'error');
+                }
+            } catch (err) {
+                console.error('Reset template error:', err);
+                await showAlert('Gagal', 'Kesalahan koneksi.', 'error');
+            }
+        }
+
+        // ================= THEME MANAGER =================
+        function applyTheme(theme) {
+            const root = document.documentElement;
+            let actualTheme = theme;
+            
+            if (theme === 'system') {
+                const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                actualTheme = systemPrefersDark ? 'dark' : 'light';
+            }
+            
+            if (actualTheme === 'dark') {
+                root.classList.add('dark');
+            } else {
+                root.classList.remove('dark');
+            }
+            
+            // Save preference
+            localStorage.setItem('theme-preference', theme);
+            
+            // Update Toggle Button UI
+            updateThemeButton(theme);
+            
+            // Re-render charts to adjust text color if charts exist
+            if (typeof allDocuments !== 'undefined' && allDocuments.length > 0) {
+                renderAnalyticsPanel(); 
+            }
+        }
+        
+        function updateThemeButton(theme) {
+            const btn = document.getElementById('theme-toggle-btn');
+            if (!btn) return;
+            
+            let iconHtml = '';
+            let text = '';
+            
+            if (theme === 'system') {
+                iconHtml = '<i data-lucide="monitor" class="w-4 h-4"></i>';
+                text = 'Tema: Sistem';
+            } else if (theme === 'dark') {
+                iconHtml = '<i data-lucide="moon" class="w-4 h-4"></i>';
+                text = 'Tema: Gelap';
+            } else {
+                iconHtml = '<i data-lucide="sun" class="w-4 h-4"></i>';
+                text = 'Tema: Terang';
+            }
+            
+            btn.innerHTML = `${iconHtml}<span>${text}</span>`;
+            lucide.createIcons();
+        }
+        
+        function cycleTheme() {
+            const current = localStorage.getItem('theme-preference') || 'system';
+            let next = 'system';
+            if (current === 'system') next = 'dark';
+            else if (current === 'dark') next = 'light';
+            else next = 'system';
+            
+            applyTheme(next);
+        }
+        
+        // Listen to system preference changes dynamically
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            const current = localStorage.getItem('theme-preference') || 'system';
+            if (current === 'system') {
+                applyTheme('system');
+            }
+        });
+        
+        // Trigger initial theme button sync on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme-preference') || 'system';
+            updateThemeButton(savedTheme);
+        });
     </script>
 </body>
 </html>

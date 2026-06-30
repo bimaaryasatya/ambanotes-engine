@@ -160,8 +160,10 @@ def create_reminder(current_user):
     
     result = reminders_col.insert_one(reminder)
     
-    log_event("reminder_service", f"Reminder created: {task}", 
-              user_id=user_id, org_id=org_id, action="REMINDER_CREATE_SUCCESS")
+    log_event("reminder_service", f"Membuat pengingat agenda baru '{task}' pada tanggal {date}", 
+              user_id=user_id, org_id=org_id, action="REMINDER_CREATE_SUCCESS",
+              audience="owner" if current_user.get("role") == "owner" else "user",
+              visibility="app", severity="info")
     
     reminder['_id'] = str(result.inserted_id)
     reminder['created_at'] = reminder['created_at'].isoformat()
@@ -239,12 +241,17 @@ def delete_reminder(current_user, reminder_id):
         obj_id = ObjectId(reminder_id)
     except Exception:
         return jsonify({"error": "Invalid ID format"}), 400
+
+    reminder = reminders_col.find_one({"_id": obj_id, "org_id": org_id})
+    task_name = reminder.get('task', 'Agenda') if reminder else 'Agenda'
         
     result = reminders_col.delete_one({"_id": obj_id, "org_id": org_id})
     
     if result.deleted_count:
-        log_event("reminder_service", f"Reminder deleted: {reminder_id}", 
-                  user_id=current_user.get("user_id"), org_id=org_id, action="REMINDER_DELETE_SUCCESS")
+        log_event("reminder_service", f"Menghapus pengingat agenda '{task_name}'", 
+                  user_id=current_user.get("user_id"), org_id=org_id, action="REMINDER_DELETE_SUCCESS",
+                  audience="owner" if current_user.get("role") == "owner" else "user",
+                  visibility="app", severity="info")
         return jsonify({"message": "Reminder deleted successfully"}), 200
         
     return jsonify({"error": "Reminder not found or unauthorized"}), 404

@@ -193,7 +193,7 @@ def chat(current_user):
                 upsert=True
             )
 
-        log_event("ai_service", "Chat response generated",
+        log_event("ai_service", "Bertanya ke Asisten Amba AI terkait berkas",
                   user_id=user_id, org_id=org_id, action="AI_CHAT_SUCCESS",
                   audience="owner" if current_user.get("role") == "owner" else "user",
                   visibility="app",
@@ -489,9 +489,12 @@ def chat_global(current_user):
                     })
                     seen_ids.add(cid)
 
-        log_event("ai_service", "Global Chat response with citations generated",
+        log_event("ai_service", "Bertanya ke Asisten Amba AI (Global)",
                   user_id=user_id, org_id=org_id, action="AI_CHAT_GLOBAL_SUCCESS", 
-                  metadata={"ref_count": len(references)})
+                  metadata={"ref_count": len(references)},
+                  audience="owner" if current_user.get("role") == "owner" else "user",
+                  visibility="app",
+                  severity="info")
         
         return jsonify({
             "answer": answer,

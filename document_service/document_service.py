@@ -415,6 +415,10 @@ def disposition_document(current_user, doc_id):
         return jsonify({"error": "Delegation ID is required"}), 400
 
     try:
+        # Fetch document title first for logging
+        doc = docs_col.find_one({"doc_id": doc_id, "org_id": org_id})
+        doc_title = doc.get("title", doc.get("filename", "Dokumen")) if doc else "Dokumen"
+
         # Check if disposition target is general
         if delegation_id == 'general':
             result = docs_col.update_one(
@@ -423,8 +427,17 @@ def disposition_document(current_user, doc_id):
             )
             if result.matched_count == 0:
                 return jsonify({"error": "Document not found"}), 404
-            log_event("document_service", f"Document {doc_id} dispositioned to general",
-                      user_id=current_user.get("user_id"), org_id=org_id, action="DOC_DISPOSITION_SUCCESS")
+            
+            log_event(
+                "document_service",
+                f"Mendisposisikan berkas '{doc_title}' ke Umum (General)",
+                user_id=current_user.get("user_id"),
+                org_id=org_id,
+                action="DOC_DISPOSITION_SUCCESS",
+                audience="owner",
+                visibility="app",
+                severity="info"
+            )
             return jsonify({"message": "Document successfully dispositioned to General"}), 200
 
         # Verify delegation exists in this organization
@@ -443,8 +456,16 @@ def disposition_document(current_user, doc_id):
         if result.matched_count == 0:
             return jsonify({"error": "Document not found"}), 404
 
-        log_event("document_service", f"Document {doc_id} dispositioned to delegation {delegation['name']}",
-                  user_id=current_user.get("user_id"), org_id=org_id, action="DOC_DISPOSITION_SUCCESS")
+        log_event(
+            "document_service",
+            f"Mendisposisikan berkas '{doc_title}' ke divisi {delegation['name']}",
+            user_id=current_user.get("user_id"),
+            org_id=org_id,
+            action="DOC_DISPOSITION_SUCCESS",
+            audience="owner",
+            visibility="app",
+            severity="info"
+        )
         return jsonify({"message": f"Document successfully dispositioned to {delegation['name']}"}), 200
 
     except Exception as e:
@@ -552,9 +573,10 @@ def delete_document(current_user, doc_id):
     result = docs_col.delete_one({"doc_id": doc_id, "org_id": org_id})
 
     if result.deleted_count:
+        doc_title = doc.get("title", doc.get("filename", "Dokumen"))
         log_event(
             "document_service",
-            f"Document deleted: {doc_id}",
+            f"Menghapus berkas '{doc_title}' secara permanen",
             user_id=user_id,
             org_id=org_id,
             action="DOC_DELETE_SUCCESS",

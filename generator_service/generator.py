@@ -18,7 +18,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Blueprint, request, jsonify, render_template_string
 from common.logger import log_event
 from common.jwt_utils import token_required, role_required
-from common.db import users_col, delegations_col, assets_col, docs_col, orgs_col
+from common.db import users_col, delegations_col, assets_col, docs_col, orgs_col, templates_col
 from common.google_drive_client import upload_file_to_google_drive
 from common.config import Config
 
@@ -623,9 +623,11 @@ def _build_generation_payload(data, current_user, requester, reference_doc=None)
     }
 
 
-def _build_html_content(payload):
+def _build_html_content(payload, org_id):
+    custom_template = templates_col.find_one({"org_id": org_id, "type": "surat_tugas"})
+    template_str = custom_template.get("content") if custom_template else SURAT_TUGAS_TEMPLATE
     return render_template_string(
-        SURAT_TUGAS_TEMPLATE,
+        template_str,
         doc_number=payload['doc_number'],
         task_description=payload['task_description'],
         signatory_name=payload['signatory_name'],
@@ -686,7 +688,7 @@ def _build_doc_record(doc_id, payload, current_user, requester, status):
             "kop": payload['kop'],
             "ttd": payload['ttd'],
         },
-        "html_content": _build_html_content(payload),
+        "html_content": _build_html_content(payload, current_user.get('org_id')),
         "uploaded_at": datetime.datetime.utcnow().isoformat(),
         "created_at": datetime.datetime.utcnow(),
     }
@@ -795,7 +797,7 @@ def _finalize_generated_document(doc, approver):
         "approved_by_name": approver.get('username'),
         "approved_at": datetime.datetime.utcnow(),
         "uploaded_at": datetime.datetime.utcnow().isoformat(),
-        "html_content": _build_html_content(payload),
+        "html_content": _build_html_content(payload, org_id),
         "generated_data": {
             **generated_data,
             "signatory_name": payload['signatory_name'],
@@ -991,3 +993,77 @@ def verify_document_page(doc_hash):
 @generator_bp.route('/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "healthy", "service": "generator_service"}), 200
+
+
+@generator_bp.route('/templates/<template_type>', methods=['GET'])
+@token_required
+@role_required('owner')
+def get_template(current_user, template_type):
+    org_id = current_user.get('org_id')
+    custom = templates_col.find_one({"org_id": org_id, "type": template_type})
+    if custom:
+        content = custom.get("content")
+        is_custom = True
+    else:
+        if template_type == 'surat_tugas':
+            content = SURAT_TUGAS_TEMPLATE
+        else:
+            return jsonify({"error": "Template type not found"}), 404
+        is_custom = False
+
+    return jsonify({"type": template_type, "content": content, "is_custom": is_custom}), 200
+
+
+@generator_bp.route('/templates/<template_type>', methods=['PUT'])
+@token_required
+@role_required('owner')
+def update_template(current_user, template_type):
+    org_id = current_user.get('org_id')
+    data = request.get_json(force=True, silent=True) or {}
+    content = data.get("content", "").strip()
+
+    if not content:
+        return jsonify({"error": "Template content cannot be empty"}), 400
+
+    templates_col.update_one(
+        {"org_id": org_id, "type": template_type},
+        {"$set": {
+            "content": content,
+            "updated_at": datetime.datetime.utcnow()
+        }},
+        upsert=True
+    )
+
+    log_event(
+        "generator_service",
+        f"Memperbarui template HTML surat {template_type.replace('_', ' ').title()}",
+        user_id=current_user.get("user_id"),
+        org_id=org_id,
+        action="TEMPLATE_UPDATE",
+        audience="owner",
+        visibility="app",
+        severity="info"
+    )
+
+    return jsonify({"message": "Template updated successfully"}), 200
+
+
+@generator_bp.route('/templates/<template_type>', methods=['DELETE'])
+@token_required
+@role_required('owner')
+def delete_template(current_user, template_type):
+    org_id = current_user.get('org_id')
+    templates_col.delete_one({"org_id": org_id, "type": template_type})
+
+    log_event(
+        "generator_service",
+        f"Mereset template surat {template_type.replace('_', ' ').title()} ke bawaan sistem",
+        user_id=current_user.get("user_id"),
+        org_id=org_id,
+        action="TEMPLATE_RESET",
+        audience="owner",
+        visibility="app",
+        severity="info"
+    )
+
+    return jsonify({"message": "Template reset to default successfully"}), 200
