@@ -60,15 +60,20 @@ def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
+        token = None
 
-        if not auth_header:
-            return jsonify({"error": "Authorization header missing"}), 401
-
-        # Handle both "Bearer <token>" and raw "<token>"
-        if auth_header.startswith("Bearer "):
-            token = auth_header.split(" ", 1)[1]
+        if auth_header:
+            # Handle both "Bearer <token>" and raw "<token>"
+            if auth_header.startswith("Bearer "):
+                token = auth_header.split(" ", 1)[1]
+            else:
+                token = auth_header
         else:
-            token = auth_header
+            # Fallback to cookies
+            token = request.cookies.get("token")
+
+        if not token:
+            return jsonify({"error": "Authorization token is missing"}), 401
         try:
             payload = verify_token(token)
         except ValueError as e:

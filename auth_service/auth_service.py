@@ -261,8 +261,7 @@ def login():
         visibility="app",
         severity="info",
     )
-
-    return jsonify({
+    response = jsonify({
         "token": token,
         "user": {
             "id": str(user['_id']),
@@ -272,7 +271,16 @@ def login():
             "org_id": user.get('org_id'),
             "delegation_id": user.get('delegation_id')
         }
-    }), 200
+    })
+    response.set_cookie(
+        key="token",
+        value=token,
+        httponly=True,
+        samesite="Lax",
+        max_age=Config.JWT_EXP_HOURS * 3600,
+        path="/"
+    )
+    return response, 200
 
 
 @auth_bp.route('/profile', methods=['GET'])

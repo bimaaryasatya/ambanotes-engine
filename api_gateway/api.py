@@ -24,6 +24,7 @@ from generator_service.generator import (
     build_verification_result,
     PUBLIC_VERIFY_TEMPLATE,
 )
+from api_gateway.dashboard import dashboard_bp
 
 app = Flask(__name__)
 CORS(app)
@@ -79,6 +80,7 @@ app.register_blueprint(document_bp, url_prefix='/document')
 app.register_blueprint(notification_bp, url_prefix='/notification')
 app.register_blueprint(ai_bp, url_prefix='/ai')
 app.register_blueprint(generator_bp, url_prefix='/generator')
+app.register_blueprint(dashboard_bp, url_prefix='')
 
 @app.route('/', methods=['GET'])
 def index():
