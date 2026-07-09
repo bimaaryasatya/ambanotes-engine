@@ -172,6 +172,25 @@ def run_test():
         assert a2_mapped["delegation_name"] == "Dinas Pekerjaan Umum", "Incorrect delegation mapping for Asset 2"
         print("Test 3 Passed!")
         
+        # --- TEST 4: Semantic Search Visibility Check ---
+        print("\n--- Test 4: Performing semantic search visibility check ---")
+        member_token = generate_token(member_user)
+        member_headers = {
+            "Authorization": f"Bearer {member_token}",
+            "Content-Type": "application/json"
+        }
+        
+        response4 = client.post("/ai/semantic-search", headers=member_headers, data=json.dumps({"query": "sampah dan jalan"}))
+        print(f"Response status: {response4.status_code}")
+        results4 = json.loads(response4.data)
+        print(f"Search results for member: {results4}")
+        
+        assert response4.status_code == 200
+        found_doc_ids = [r["doc_id"] for r in results4]
+        # member is only allowed to see doc_1, so doc_2 must not be returned
+        assert doc_2_id not in found_doc_ids, "Restricted document 2 was returned to unauthorized member!"
+        print("Test 4 Passed!")
+        
         print("\n=== ALL TESTS PASSED SUCCESSFULLY ===")
         
     finally:

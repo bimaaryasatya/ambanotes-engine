@@ -37,6 +37,37 @@ def _call_mistral(prompt, system_instruction=None, history=None):
     response.raise_for_status()
     return response.json()['choices'][0]['message']['content']
 
+
+def _get_user_docs_query(current_user):
+    org_id = current_user.get("org_id")
+    role = current_user.get("role", "member")
+    user_id = current_user.get("user_id")
+    delegation_id = current_user.get("delegation_id") or None
+
+    if role == 'owner':
+        return {"org_id": org_id}
+    
+    is_general = not delegation_id or delegation_id == "general"
+    if is_general:
+        return {
+            "org_id": org_id,
+            "$or": [
+                {"delegation_id": "general"},
+                {"delegation_id": None},
+                {"delegation_id": {"$exists": False}},
+                {"uploaded_by": user_id},
+            ]
+        }
+    else:
+        return {
+            "org_id": org_id,
+            "$or": [
+                {"delegation_id": delegation_id},
+                {"uploaded_by": user_id},
+            ]
+        }
+
+
 ai_bp = Blueprint('ai', __name__)
 
 
@@ -436,8 +467,9 @@ def chat_global(current_user):
         if not user_message:
             return jsonify({"error": "Message is required"}), 400
 
-        # Fetch all documents for this organization
-        docs = list(docs_col.find({"org_id": org_id}))
+        # Fetch only documents that this user is authorized to see
+        query = _get_user_docs_query(current_user)
+        docs = list(docs_col.find(query))
         
         if not docs:
             return jsonify({
@@ -961,8 +993,9 @@ def semantic_search(current_user):
         if not query:
             return jsonify({"error": "Query is required"}), 400
 
-        # Fetch titles and snippets for all organization docs
-        docs = list(docs_col.find({"org_id": org_id}, {"doc_id": 1, "filename": 1, "content": 1}))
+        # Fetch titles and snippets for authorized docs only
+        query_filter = _get_user_docs_query(current_user)
+        docs = list(docs_col.find(query_filter, {"doc_id": 1, "filename": 1, "content": 1}))
         if not docs:
             return jsonify([]), 200
 
