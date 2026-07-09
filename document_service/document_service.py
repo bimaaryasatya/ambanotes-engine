@@ -34,9 +34,10 @@ def _get_auth_header():
     return {"Authorization": request.headers.get("Authorization", "")}
 
 
-def process_ai_pipeline(text):
+def process_ai_pipeline(text, headers=None):
     """Fungsi helper untuk menjalankan Klasifikasi dan NER (meneruskan token auth)."""
-    headers = _get_auth_header()
+    if headers is None:
+        headers = _get_auth_header()
     try:
         class_res = requests.post(f"{GATEWAY_URL}/classification/predict", json={"text": text}, headers=headers)
         classification = class_res.json() if class_res.status_code == 200 else {"label": "Unknown"}
@@ -48,19 +49,6 @@ def process_ai_pipeline(text):
     except Exception as e:
         log_event("document_service", f"AI Pipeline error: {str(e)}", action="AI_PIPELINE_ERROR", metadata={"error": str(e)})
         return {"label": "Error"}, {}
-
-
-def _get_delegation_name(delegation_id, org_id):
-    if not delegation_id or delegation_id == "general":
-        return "General"
-
-    delegation = None
-    try:
-        delegation = delegations_col.find_one({"_id": ObjectId(delegation_id), "org_id": org_id})
-    except Exception:
-        delegation = delegations_col.find_one({"_id": delegation_id, "org_id": org_id})
-
-    return delegation.get("name") if delegation else "General"
 
 
 _delegation_cache = {}
@@ -234,102 +222,154 @@ def upload_document(current_user):
 
     file = request.files['file']
 
+    filename = file.filename
+    mimetype = file.mimetype
     try:
-        files = {'file': (file.filename, file.stream, file.mimetype)}
-        ocr_res = requests.post(f"{GATEWAY_URL}/ocr/extract-text", files=files, headers=_get_auth_header())
-        ocr_res.raise_for_status()
-        extracted_text = ocr_res.json().get("text", "")
+        file_bytes = file.read()
     except Exception as e:
-        log_event("document_service", f"OCR request failed: {str(e)}", 
-                  user_id=user_id, org_id=org_id, action="DOC_OCR_FAILED", metadata={"error": str(e)}, severity="error")
-        return jsonify({"error": "OCR failed"}), 500
-
-    classification, entities = process_ai_pipeline(extracted_text)
-
-    # Reset stream pointer setelah dibaca oleh request POST OCR agar bisa dibaca ulang
-    file.stream.seek(0)
-
-    # 1. Periksa koneksi Google Drive milik owner organisasi
-    google_drive_data = None
-    file_data_b64 = None
-
-    owner = users_col.find_one({
-        "org_id": org_id,
-        "role": "owner",
-        "google_drive_connected": True
-    })
-
-    if owner:
-        refresh_token = owner.get("google_oauth", {}).get("refresh_token")
-        if refresh_token:
-            try:
-                google_drive_data = upload_file_to_google_drive(
-                    file_stream=file.stream,
-                    filename=file.filename,
-                    mimetype=file.mimetype,
-                    refresh_token=refresh_token
-                )
-                log_event(
-                    "document_service",
-                    f"Successfully uploaded file {file.filename} to organization owner's Google Drive",
-                    user_id=user_id,
-                    org_id=org_id,
-                    action="DOC_DRIVE_UPLOAD_SUCCESS"
-                )
-            except Exception as drive_err:
-                log_event(
-                    "document_service",
-                    f"Failed to upload to owner's Google Drive: {str(drive_err)}, falling back to local Base64",
-                    user_id=user_id,
-                    org_id=org_id,
-                    action="DOC_DRIVE_UPLOAD_FAILED"
-                )
-                file.stream.seek(0)
-                file_data_b64 = base64.b64encode(file.stream.read()).decode("utf-8")
-        else:
-            file_data_b64 = base64.b64encode(file.stream.read()).decode("utf-8")
-    else:
-        file_data_b64 = base64.b64encode(file.stream.read()).decode("utf-8")
+        return jsonify({"error": f"Failed to read file: {str(e)}"}), 400
 
     doc_id = uuid.uuid4().hex
-    title = generate_document_title(extracted_text, file.filename)
+    
+    # 1. Create a placeholder document with "processing" status
     doc_data = {
         "doc_id": doc_id,
-        "filename": file.filename,
-        "title": title,
-        "content": extracted_text,
-        "classification": classification,
-        "entities": entities,
+        "filename": filename,
+        "title": os.path.splitext(filename)[0],
+        "content": "Dokumen sedang diproses di server oleh pipeline AI...",
+        "classification": {"label": "Processing", "label_name": "Processing"},
+        "entities": {},
         "uploaded_at": datetime.datetime.utcnow(),
         "uploaded_by": user_id,
         "org_id": org_id,
         "delegation_id": "general",
-        "google_drive": google_drive_data,
-        "mimetype": file.mimetype,
-        "status": "processed"
+        "google_drive": None,
+        "mimetype": mimetype,
+        "status": "processing"
     }
 
-    if file_data_b64:
-        doc_data["file_data"] = file_data_b64
-
     docs_col.insert_one(doc_data)
-    doc_data.pop('_id', None)
+    
+    response_data = dict(doc_data)
+    response_data.pop("_id", None)
+    response_data["delegation_name"] = "General"
+    response_data["security_suggestion"] = "Dokumen Anda sedang diproses oleh AI..."
 
-    # 2. Hasilkan saran keamanan dinamis dengan Mistral AI jika belum terhubung
-    if not google_drive_data:
-        doc_data["security_suggestion"] = generate_security_suggestion(doc_data)
-    else:
-        doc_data["security_suggestion"] = None
-    doc_data["delegation_name"] = "General"
+    auth_header = _get_auth_header()
 
-    log_event("document_service", f"File processed and saved: {file.filename}", 
-              user_id=user_id, org_id=org_id, action="DOC_UPLOAD_SUCCESS", 
-              metadata={"doc_id": doc_id, "filename": file.filename},
-              audience="owner" if current_user.get("role") == "owner" else "user",
-              visibility="app",
-              severity="info")
-              
-    return jsonify(doc_data), 201
+    # 2. Run the pipeline asynchronously in a background thread
+    import threading
+
+    def process_document_async():
+        try:
+            try:
+                # Run OCR
+                files_payload = {'file': (filename, BytesIO(file_bytes), mimetype)}
+                ocr_res = requests.post(f"{GATEWAY_URL}/ocr/extract-text", files=files_payload, headers=auth_header)
+                ocr_res.raise_for_status()
+                extracted_text = ocr_res.json().get("text", "")
+            except Exception as e:
+                log_event("document_service", f"Async OCR failed for {doc_id}: {str(e)}", 
+                          user_id=user_id, org_id=org_id, action="DOC_OCR_FAILED", metadata={"error": str(e)}, severity="error")
+                docs_col.update_one(
+                    {"doc_id": doc_id, "org_id": org_id},
+                    {"$set": {"status": "error", "content": f"Gagal menjalankan OCR pada berkas: {str(e)}"}}
+                )
+                return
+
+            # Run AI pipeline
+            classification, entities = process_ai_pipeline(extracted_text, headers=auth_header)
+
+            # Google Drive / Base64 upload
+            google_drive_data = None
+            file_data_b64 = None
+
+            owner = users_col.find_one({
+                "org_id": org_id,
+                "role": "owner",
+                "google_drive_connected": True
+            })
+
+            if owner:
+                refresh_token = owner.get("google_oauth", {}).get("refresh_token")
+                if refresh_token:
+                    try:
+                        google_drive_data = upload_file_to_google_drive(
+                            file_stream=BytesIO(file_bytes),
+                            filename=filename,
+                            mimetype=mimetype,
+                            refresh_token=refresh_token
+                        )
+                        log_event(
+                            "document_service",
+                            f"Async uploaded file {filename} to organization owner's Google Drive",
+                            user_id=user_id,
+                            org_id=org_id,
+                            action="DOC_DRIVE_UPLOAD_SUCCESS"
+                        )
+                    except Exception as drive_err:
+                        log_event(
+                            "document_service",
+                            f"Failed async upload to owner's Google Drive: {str(drive_err)}, falling back to local Base64",
+                            user_id=user_id,
+                            org_id=org_id,
+                            action="DOC_DRIVE_UPLOAD_FAILED"
+                        )
+                        file_data_b64 = base64.b64encode(file_bytes).decode("utf-8")
+                else:
+                    file_data_b64 = base64.b64encode(file_bytes).decode("utf-8")
+            else:
+                file_data_b64 = base64.b64encode(file_bytes).decode("utf-8")
+
+            title = generate_document_title(extracted_text, filename)
+            
+            update_doc = {
+                "title": title,
+                "content": extracted_text,
+                "classification": classification,
+                "entities": entities,
+                "google_drive": google_drive_data,
+                "status": "processed"
+            }
+
+            if file_data_b64:
+                update_doc["file_data"] = file_data_b64
+
+            if not google_drive_data:
+                temp_doc_for_suggestion = {
+                    "classification": classification,
+                    "entities": entities
+                }
+                update_doc["security_suggestion"] = generate_security_suggestion(temp_doc_for_suggestion)
+            else:
+                update_doc["security_suggestion"] = None
+
+            docs_col.update_one({"doc_id": doc_id, "org_id": org_id}, {"$set": update_doc})
+
+            print(f"[ASYNC] Document {doc_id} ({filename}) processed successfully — status: processed")
+            log_event("document_service", f"Async file processed and saved: {filename}", 
+                      user_id=user_id, org_id=org_id, action="DOC_UPLOAD_SUCCESS", 
+                      metadata={"doc_id": doc_id, "filename": filename},
+                      audience="owner" if current_user.get("role") == "owner" else "user",
+                      visibility="app",
+                      severity="info")
+        except Exception as e:
+            print(f"[ASYNC] FATAL ERROR processing document {doc_id}: {e}")
+            log_event("document_service", f"Async processing fatally failed for {doc_id}: {str(e)}", 
+                      user_id=user_id, org_id=org_id, action="DOC_ASYNC_FATAL", metadata={"error": str(e)}, severity="error")
+            try:
+                docs_col.update_one(
+                    {"doc_id": doc_id, "org_id": org_id},
+                    {"$set": {"status": "error", "content": f"Gagal memproses dokumen: {str(e)}"}}
+                )
+            except Exception:
+                pass
+
+    thread = threading.Thread(target=process_document_async)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify(response_data), 201
 
 
 @document_bp.route('/list', methods=['GET'])
