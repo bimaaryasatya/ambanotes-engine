@@ -17,11 +17,15 @@ def _get_jwt_secret():
 
 def generate_token(user):
     now = datetime.utcnow()
+    delegation_id = user.get("delegation_id")
+    if delegation_id:
+        delegation_id = str(delegation_id)
     payload = {
         "user_id": str(user["_id"]),
         "username": user["username"],
         "role": user["role"],
         "org_id": user.get("org_id"),
+        "delegation_id": delegation_id,
         "iss": Config.JWT_ISSUER,
         "aud": Config.JWT_AUDIENCE,
         "iat": now,

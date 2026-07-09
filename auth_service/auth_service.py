@@ -921,18 +921,21 @@ def list_assets(current_user):
     List All Assets (Kop & TTD) in Organization
     """
     org_id = current_user.get('org_id')
+
+    # Prefetch all delegations to avoid N+1 query
+    try:
+        delegations = list(delegations_col.find({"org_id": org_id}))
+        delegation_map = {str(d["_id"]): d.get("name") for d in delegations}
+    except Exception:
+        delegation_map = {}
+
     assets = list(assets_col.find({"org_id": org_id}))
     asset_list = []
     for a in assets:
         delegation_name = None
         del_id = a.get('delegation_id')
         if del_id:
-            try:
-                delegation = delegations_col.find_one({"_id": ObjectId(del_id)})
-                if delegation:
-                    delegation_name = delegation.get('name')
-            except Exception:
-                pass
+            delegation_name = delegation_map.get(str(del_id))
         asset_list.append({
             "id": str(a['_id']),
             "type": "kop" if a.get('type') == "letterhead" else "ttd" if a.get('type') == "signature" else a.get('type'),
@@ -1260,19 +1263,21 @@ def list_members(current_user):
         return jsonify([]), 200
 
     try:
+        # Prefetch all delegations to avoid N+1 queries
+        try:
+            delegations = list(delegations_col.find({"org_id": org_id}))
+            delegation_map = {str(d["_id"]): d.get("name") for d in delegations}
+        except Exception:
+            delegation_map = {}
+
         users = list(users_col.find({"org_id": org_id}))
         member_list = []
         for u in users:
-            # Look up delegation name if delegation_id exists
+            # Look up delegation name if delegation_id exists from pre-fetched map
             delegation_name = None
             del_id = u.get('delegation_id')
             if del_id:
-                try:
-                    delegation = delegations_col.find_one({"_id": ObjectId(del_id)})
-                    if delegation:
-                        delegation_name = delegation.get('name')
-                except Exception:
-                    pass
+                delegation_name = delegation_map.get(str(del_id))
 
             member_list.append({
                 "id": str(u['_id']),

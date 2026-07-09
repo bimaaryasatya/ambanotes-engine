@@ -63,11 +63,26 @@ def _get_delegation_name(delegation_id, org_id):
     return delegation.get("name") if delegation else "General"
 
 
+_delegation_cache = {}
+
+def _get_delegation_name_cached(delegation_id, org_id):
+    if not delegation_id or delegation_id == "general":
+        return "General"
+    cache_key = f"{org_id}:{delegation_id}"
+    if cache_key not in _delegation_cache:
+        delegation = None
+        try:
+            delegation = delegations_col.find_one({"_id": ObjectId(delegation_id), "org_id": org_id})
+        except Exception:
+            delegation = delegations_col.find_one({"_id": delegation_id, "org_id": org_id})
+        _delegation_cache[cache_key] = delegation.get("name") if delegation else "General"
+    return _delegation_cache[cache_key]
+
 def _serialize_doc(doc):
     doc.pop("_id", None)
     delegation_id = doc.get("delegation_id") or "general"
     doc["delegation_id"] = delegation_id
-    doc["delegation_name"] = _get_delegation_name(delegation_id, doc.get("org_id"))
+    doc["delegation_name"] = _get_delegation_name_cached(delegation_id, doc.get("org_id"))
     if not doc.get("title"):
         doc["title"] = doc.get("filename")
     return doc
@@ -320,41 +335,32 @@ def upload_document(current_user):
 @document_bp.route('/list', methods=['GET'])
 @token_required
 def list_documents(current_user):
-    """
-    List all processed documents (filtered by organization and delegation for members)
-    """
     org_id = current_user.get("org_id")
     role = current_user.get("role", "member")
     user_id = current_user.get("user_id")
 
-    print(f"[DEBUG LIST_DOCS] --- INCOMING REQUEST ---")
-    print(f"[DEBUG LIST_DOCS] User ID (JWT): {user_id}")
-    print(f"[DEBUG LIST_DOCS] Role (JWT): {role}")
-    print(f"[DEBUG LIST_DOCS] Org ID (JWT): {org_id}")
+    delegation_id = current_user.get("delegation_id") or None
 
-    # For safety/reliability, always fetch latest user status from DB
-    user = None
-    if user_id:
-        try:
-            user = users_col.find_one({"_id": ObjectId(user_id)})
-        except Exception as e:
-            print(f"[DEBUG LIST_DOCS] ObjectId parse error for user_id {user_id}: {e}")
-        if not user:
-            user = users_col.find_one({"_id": user_id})
-
-    delegation_id = None
-    if user:
-        delegation_id = user.get("delegation_id")
-        print(f"[DEBUG LIST_DOCS] Found user in DB: {user.get('username')}, delegation_id: {delegation_id}")
-    else:
-        print(f"[DEBUG LIST_DOCS] WARNING: User not found in DB for user_id: {user_id}")
+    projection = {
+        "_id": 0,
+        "doc_id": 1,
+        "filename": 1,
+        "title": 1,
+        "classification": 1,
+        "entities": 1,
+        "uploaded_at": 1,
+        "uploaded_by": 1,
+        "org_id": 1,
+        "delegation_id": 1,
+        "mimetype": 1,
+        "status": 1,
+        "google_drive": 1,
+    }
 
     if role == 'owner':
-        docs = list(docs_col.find({"org_id": org_id}))
-        print(f"[DEBUG LIST_DOCS] Owner request. Found {len(docs)} documents for org_id: {org_id}")
+        docs = list(docs_col.find({"org_id": org_id}, projection))
     else:
-        # A member is general if delegation_id is None, "", or "general"
-        is_general = (delegation_id is None or delegation_id == "" or delegation_id == "general")
+        is_general = not delegation_id or delegation_id == "general"
         if is_general:
             query = {
                 "org_id": org_id,
@@ -363,40 +369,36 @@ def list_documents(current_user):
                     {"delegation_id": None},
                     {"delegation_id": {"$exists": False}},
                     {"uploaded_by": user_id},
-                    {"uploaded_by": ObjectId(user_id)} if ObjectId.is_valid(user_id or "") else {"uploaded_by": user_id},
                 ]
             }
-            docs = list(docs_col.find(query))
-            print(f"[DEBUG LIST_DOCS] Member is in General division. Found {len(docs)} general documents.")
         else:
             query = {
                 "org_id": org_id,
                 "$or": [
                     {"delegation_id": delegation_id},
-                    {"delegation_id": str(delegation_id)},
                     {"uploaded_by": user_id},
-                    {"uploaded_by": ObjectId(user_id)} if ObjectId.is_valid(user_id or "") else {"uploaded_by": user_id},
                 ]
             }
-            docs = list(docs_col.find(query))
-            
-            # Print delegation name for debug visibility
-            try:
-                del_obj = delegations_col.find_one({"_id": ObjectId(delegation_id)})
-            except Exception:
-                del_obj = delegations_col.find_one({"_id": delegation_id})
-            del_name = del_obj.get("name") if del_obj else "Unknown"
-            
-            print(f"[DEBUG LIST_DOCS] Member request for division '{del_name}' (ID: {delegation_id}). Found {len(docs)} documents.")
-            
-            for d in docs:
-                print(f"  -> Doc ID: {d.get('doc_id')}, Title: '{d.get('title')}', delegation_id: {d.get('delegation_id')}")
+        docs = list(docs_col.find(query, projection))
+
+    # Prefetch all delegations for this organization to avoid N+1 queries
+    try:
+        delegations = list(delegations_col.find({"org_id": org_id}))
+        _delegation_cache.clear()
+        for d in delegations:
+            d_id = d["_id"]
+            d_name = d.get("name")
+            _delegation_cache[f"{org_id}:{d_id}"] = d_name
+            _delegation_cache[f"{org_id}:{str(d_id)}"] = d_name
+    except Exception as e:
+        log_event("document_service", f"Failed to prefetch delegations: {str(e)}", severity="warning")
+        _delegation_cache.clear()
 
     docs = [_serialize_doc(doc) for doc in docs]
-        
-    log_event("document_service", f"Listed docs for org: {org_id}, role: {role}", 
+
+    log_event("document_service", f"Listed docs for org: {org_id}, role: {role}",
               user_id=user_id, org_id=org_id, action="DOC_LIST_VIEW")
-              
+
     return jsonify(docs), 200
 
 
