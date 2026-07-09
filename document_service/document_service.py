@@ -386,6 +386,7 @@ def list_documents(current_user):
         "doc_id": 1,
         "filename": 1,
         "title": 1,
+        "content": 1,
         "classification": 1,
         "entities": 1,
         "uploaded_at": 1,
