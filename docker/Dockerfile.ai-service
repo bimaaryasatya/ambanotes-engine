@@ -1,0 +1,17 @@
+﻿FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY docker/requirements/core.txt docker/requirements/
+COPY docker/requirements/ai-service.txt docker/requirements/
+RUN pip install --no-cache-dir -r docker/requirements/ai-service.txt
+
+COPY common/ common/
+COPY ai_service/ ai_service/
+COPY docker/entrypoints/ docker/entrypoints/
+
+EXPOSE 5002
+
+ENV GATEWAY_URL=http://ai-service:5002
+
+CMD ["python", "docker/entrypoints/run_ai_service.py"]

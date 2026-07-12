@@ -72,20 +72,54 @@
                     </div>
                 </div>
 
-                <div class="flex items-center">
-                    <input type="checkbox" id="remember_me" name="remember_me"
-                        class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded">
-                    <label for="remember_me" class="ml-2 block text-sm text-slate-700">Ingat perangkat ini</label>
+                <div id="login-fields" class="space-y-5">
+                    <div class="flex items-center">
+                        <input type="checkbox" id="remember_me" name="remember_me"
+                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded">
+                        <label for="remember_me" class="ml-2 block text-sm text-slate-700">Ingat perangkat ini</label>
+                    </div>
+
+                    <button type="submit" id="submitBtn"
+                        class="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                        <span id="btnText">Masuk Ke Dashboard</span>
+                        <svg id="loadingSpinner" class="hidden animate-spin ml-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </button>
                 </div>
 
-                <button type="submit" id="submitBtn"
-                    class="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
-                    <span id="btnText">Masuk Ke Dashboard</span>
-                    <svg id="loadingSpinner" class="hidden animate-spin ml-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                </button>
+                <!-- OTP Verification Section (hidden initially) -->
+                <div id="otp-section" class="hidden space-y-5">
+                    <div class="p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                        <p class="text-xs text-blue-800 font-medium">
+                            Perangkat baru terdeteksi. Silakan masukkan kode OTP 6-digit yang telah dikirim ke email Anda.
+                        </p>
+                    </div>
+                    <div>
+                        <label for="otp-input" class="block text-sm font-medium text-slate-700 mb-1.5">Kode OTP</label>
+                        <input type="text" id="otp-input" maxlength="6"
+                            class="block w-full px-3 py-2.5 border border-slate-300 rounded-lg text-slate-900 text-center text-2xl tracking-[0.5em] font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                            placeholder="123456">
+                    </div>
+                    <button type="button" id="verifyOtpBtn"
+                        class="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                        <span id="verifyBtnText">Verifikasi & Masuk</span>
+                        <svg id="verifyLoadingSpinner" class="hidden animate-spin ml-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </button>
+                    <div class="flex justify-center gap-4 text-xs">
+                        <button type="button" onclick="resendOtp()" id="resendOtpBtn" class="font-semibold text-blue-600 hover:text-blue-700 transition-colors">
+                            Kirim Ulang OTP
+                        </button>
+                        <span class="text-slate-300">|</span>
+                        <button type="button" onclick="cancelOtp()" class="font-semibold text-slate-500 hover:text-slate-700 transition-colors">
+                            Kembali ke Login
+                        </button>
+                    </div>
+                </div>
             </form>
         </div>
 
@@ -150,8 +184,21 @@
     </div>
 
     <script>
-        // Inisialisasi Ikon Lucide
         lucide.createIcons();
+
+        // Generate or retrieve device ID
+        function getDeviceId() {
+            let deviceId = localStorage.getItem('device_id');
+            if (!deviceId) {
+                deviceId = 'web-' + crypto.randomUUID();
+                localStorage.setItem('device_id', deviceId);
+            }
+            return deviceId;
+        }
+
+        // State for OTP flow
+        let loginToken = sessionStorage.getItem('login_token') || null;
+        let loginEmail = sessionStorage.getItem('login_email') || null;
 
         // Toggle visibility Password
         const passwordInput = document.getElementById('password');
@@ -166,69 +213,199 @@
             lucide.createIcons();
         });
 
-        // Form Submit handler
+        // DOM refs
         const loginForm = document.getElementById('loginForm');
         const submitBtn = document.getElementById('submitBtn');
         const btnText = document.getElementById('btnText');
         const loadingSpinner = document.getElementById('loadingSpinner');
         const errorAlert = document.getElementById('errorAlert');
         const errorMessage = document.getElementById('errorMessage');
+        const loginFields = document.getElementById('login-fields');
+        const otpSection = document.getElementById('otp-section');
+        const otpInput = document.getElementById('otp-input');
+        const verifyOtpBtn = document.getElementById('verifyOtpBtn');
+        const verifyBtnText = document.getElementById('verifyBtnText');
+        const verifyLoadingSpinner = document.getElementById('verifyLoadingSpinner');
 
+        function showOtpSection() {
+            loginFields.classList.add('hidden');
+            otpSection.classList.remove('hidden');
+            otpInput.focus();
+        }
+
+        // On page load, resume OTP flow if token exists
+        if (loginToken && loginEmail) {
+            showOtpSection();
+        }
+
+        // Helper to reset login form state
+        function resetLoginForm() {
+            submitBtn.disabled = false;
+            btnText.textContent = "Masuk Ke Dashboard";
+            loadingSpinner.classList.add('hidden');
+        }
+
+        // Step 1: Initial login
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            // Sembunyikan alert error
             errorAlert.classList.add('hidden');
 
-            // Jalankan loading spinner
             submitBtn.disabled = true;
             btnText.textContent = "Memproses...";
             loadingSpinner.classList.remove('hidden');
 
             const email = document.getElementById('email').value;
             const password = passwordInput.value;
+            const deviceId = getDeviceId();
+            const remember = document.getElementById('remember_me').checked;
 
             try {
                 const response = await fetch('/auth/login', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ email, password })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, device_id: deviceId })
                 });
 
-                const data = await response.json();
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    throw new Error('Server returned an invalid response. Please try again.');
+                }
 
                 if (!response.ok) {
                     throw new Error(data.error || 'Terjadi kesalahan sistem');
                 }
 
-                // Cek Role
-                const role = data.user.role;
-                if (role !== 'owner' && role !== 'developer') {
-                    // Hapus cookie token yang otomatis terpasang dengan meload endpoint logout
-                    await fetch('/logout');
-                    throw new Error('Akses ditolak. Dashboard hanya dapat diakses oleh Owner dan Developer.');
+                // Handle OTP requirement (new device)
+                if (data.requires_otp) {
+                    loginToken = data.login_token;
+                    loginEmail = data.email;
+                    sessionStorage.setItem('login_token', loginToken);
+                    sessionStorage.setItem('login_email', loginEmail);
+                    showOtpSection();
+                    resetLoginForm();
+                    return;
                 }
 
-                // Redirect berdasarkan role
-                if (role === 'owner') {
+                // Clear any stale OTP state
+                sessionStorage.removeItem('login_token');
+                sessionStorage.removeItem('login_email');
+
+                // Direct login success (known device)
+                if (data.redirect) {
+                    window.location.href = data.redirect;
+                } else {
                     window.location.href = '/dashboard';
-                } else if (role === 'developer') {
-                    window.location.href = '/console';
                 }
 
             } catch (err) {
-                // Tampilkan alert error
                 errorMessage.textContent = err.message;
                 errorAlert.classList.remove('hidden');
-
-                // Reset button state
-                submitBtn.disabled = false;
-                btnText.textContent = "Masuk Ke Dashboard";
-                loadingSpinner.classList.add('hidden');
+                resetLoginForm();
             }
         });
+
+        // Step 2: Verify OTP
+        async function verifyOtp() {
+            const otp = otpInput.value.trim();
+            if (!otp || otp.length < 6) {
+                errorMessage.textContent = 'Harap masukkan kode OTP 6-digit.';
+                errorAlert.classList.remove('hidden');
+                return;
+            }
+
+            errorAlert.classList.add('hidden');
+            verifyOtpBtn.disabled = true;
+            verifyBtnText.textContent = "Memverifikasi...";
+            verifyLoadingSpinner.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/auth/verify-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        login_token: loginToken,
+                        otp: otp
+                    })
+                });
+
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    throw new Error('Server returned an invalid response. Please try again.');
+                }
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Kode OTP tidak valid');
+                }
+
+                sessionStorage.removeItem('login_token');
+                sessionStorage.removeItem('login_email');
+
+                if (data.redirect) {
+                    window.location.href = data.redirect;
+                } else {
+                    window.location.href = '/dashboard';
+                }
+
+            } catch (err) {
+                errorMessage.textContent = err.message;
+                errorAlert.classList.remove('hidden');
+                verifyOtpBtn.disabled = false;
+                verifyBtnText.textContent = "Verifikasi & Masuk";
+                verifyLoadingSpinner.classList.add('hidden');
+            }
+        }
+
+        verifyOtpBtn.addEventListener('click', verifyOtp);
+        otpInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') verifyOtp();
+        });
+
+        async function resendOtp() {
+            if (!loginEmail) return;
+            const btn = document.getElementById('resendOtpBtn');
+            btn.disabled = true;
+            btn.textContent = 'Mengirim...';
+            try {
+                const res = await fetch('/auth/resend-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: loginEmail, purpose: 'verify_login' })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Gagal mengirim ulang OTP');
+                errorMessage.textContent = 'Kode OTP baru telah dikirim ke email Anda.';
+                errorAlert.className = 'mb-6 p-4 bg-emerald-50 border-l-4 border-emerald-500 rounded text-emerald-800 text-sm flex items-start space-x-2';
+                errorAlert.classList.remove('hidden');
+                setTimeout(() => errorAlert.classList.add('hidden'), 5000);
+            } catch (err) {
+                errorMessage.textContent = err.message;
+                errorAlert.className = 'mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded text-red-700 text-sm flex items-start space-x-2';
+                errorAlert.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Kirim Ulang OTP';
+            }
+        }
+
+        function cancelOtp() {
+            loginToken = null;
+            loginEmail = null;
+            sessionStorage.removeItem('login_token');
+            sessionStorage.removeItem('login_email');
+            otpInput.value = '';
+            otpSection.classList.add('hidden');
+            loginFields.classList.remove('hidden');
+            errorAlert.classList.add('hidden');
+            errorAlert.className = 'mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded text-red-700 text-sm flex items-start space-x-2';
+            verifyOtpBtn.disabled = false;
+            verifyBtnText.textContent = "Verifikasi & Masuk";
+            verifyLoadingSpinner.classList.add('hidden');
+        }
 
         // MODAL LUPA PASSWORD (OTP) HANDLERS
         const forgotModal = document.getElementById('forgotPasswordModal');

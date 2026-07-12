@@ -1,0 +1,4 @@
+-r core.txt
+flasgger==0.9.7.1
+strawberry-graphql[flask]
+

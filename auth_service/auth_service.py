@@ -7,9 +7,10 @@ import requests
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Blueprint, jsonify, request
+import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
-from common.db import users_col, orgs_col, invitations_col, delegations_col, assets_col, docs_col, otps_col, logs_col
-from common.jwt_utils import generate_token, token_required, role_required
+from common.db import users_col, orgs_col, invitations_col, delegations_col, assets_col, docs_col, otps_col, logs_col, reminders_col, chats_col
+from common.jwt_utils import generate_token, generate_purpose_token, verify_purpose_token, token_required, role_required
 from common.email_utils import send_otp_email, send_invitation_email
 from common.logger import log_event
 from common.config import Config
@@ -123,8 +124,37 @@ def register():
     if users_col.find_one({"username": username}):
         return jsonify({"error": "Username already exists"}), 400
     
-    if users_col.find_one({"email": email}):
-        return jsonify({"error": "Email already exists"}), 400
+    existing_user = users_col.find_one({"email": email})
+    if existing_user:
+        if existing_user.get('email_verified', False):
+            return jsonify({"error": "Email already exists"}), 400
+        # Unverified user re-registering → resume verification flow
+        existing_user_id = str(existing_user['_id'])
+        existing_username = existing_user.get('username', username)
+        otp_code = "".join([str(secrets.randbelow(10)) for _ in range(6)])
+        expiry = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+        otps_col.update_one(
+            {"email": email, "purpose": "verify_email"},
+            {"$set": {"otp": otp_code, "expiry": expiry, "purpose": "verify_email", "created_at": datetime.datetime.utcnow()}},
+            upsert=True
+        )
+        send_otp_email(email, otp_code, purpose="verify_email")
+        registration_token = generate_purpose_token(
+            "verify_email",
+            email,
+            extra_payload={"user_id": existing_user_id, "username": existing_username}
+        )
+        otps_col.update_one(
+            {"email": email, "purpose": "verify_email_token"},
+            {"$set": {"token": registration_token, "expiry": expiry, "created_at": datetime.datetime.utcnow()}},
+            upsert=True
+        )
+        return jsonify({
+            "message": "Email already registered but not verified. OTP resent.",
+            "requires_verification": True,
+            "registration_token": registration_token,
+            "email": email,
+        }), 200
 
     org_id = None
     role = 'member'
@@ -181,15 +211,37 @@ def register():
         "org_id": org_id,
         "delegation_id": delegation_id,
         "role": role,
+        "email_verified": False,
+        "known_devices": [],
         "created_at": datetime.datetime.utcnow()
     }
 
     result = users_col.insert_one(user)
     user_id = str(result.inserted_id)
 
+    # Generate and send OTP for email verification
+    otp_code = "".join([str(secrets.randbelow(10)) for _ in range(6)])
+    expiry = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+    otps_col.update_one(
+        {"email": email, "purpose": "verify_email"},
+        {"$set": {"otp": otp_code, "expiry": expiry, "purpose": "verify_email", "created_at": datetime.datetime.utcnow()}},
+        upsert=True
+    )
+
+    email_success, email_msg = send_otp_email(email, otp_code, purpose="verify_email")
+    if not email_success:
+        log_event("auth_service", f"Failed to send verification email to {email}: {email_msg}", action="VERIFY_EMAIL_FAILED")
+
+    # Generate short-lived registration token
+    registration_token = generate_purpose_token(
+        "verify_email",
+        email,
+        extra_payload={"user_id": user_id, "username": username}
+    )
+
     log_event(
         "auth_service",
-        f"User registered: {username}",
+        f"User registered: {username} (email verification pending)",
         user_id=user_id,
         org_id=org_id,
         action="REGISTER_SUCCESS",
@@ -199,9 +251,78 @@ def register():
     )
 
     return jsonify({
-        "message": "User registered successfully",
-        "user": {"id": user_id, "username": username, "email": email, "role": role, "org_id": org_id, "delegation_id": delegation_id}
+        "message": "Registration successful. Please verify your email.",
+        "requires_verification": True,
+        "registration_token": registration_token,
+        "email": email,
     }), 201
+
+
+@auth_bp.route('/verify-email', methods=['POST'])
+def verify_email():
+    """
+    Verify email using OTP sent after registration.
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - registration_token
+            - otp
+          properties:
+            registration_token:
+              type: string
+            otp:
+              type: string
+    responses:
+      200:
+        description: Email verified successfully
+      400:
+        description: Invalid or expired OTP
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    token = data.get('registration_token', '').strip()
+    otp_input = data.get('otp', '').strip()
+
+    if not token or not otp_input:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        payload = verify_purpose_token(token, "verify_email")
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Registration token has expired. Please register again."}), 400
+    except Exception:
+        return jsonify({"error": "Invalid registration token"}), 400
+
+    email = payload.get('email')
+
+    otp_record = otps_col.find_one({"email": email, "purpose": "verify_email"})
+    if not otp_record:
+        return jsonify({"error": "No OTP found. Please request a new one."}), 400
+
+    if otp_record['otp'] != otp_input:
+        return jsonify({"error": "Invalid OTP code"}), 400
+
+    if datetime.datetime.utcnow() > otp_record['expiry']:
+        return jsonify({"error": "OTP has expired"}), 400
+
+    # Mark email as verified
+    users_col.update_one({"email": email}, {"$set": {"email_verified": True}})
+    otps_col.delete_one({"email": email, "purpose": "verify_email"})
+    otps_col.delete_one({"email": email, "purpose": "verify_email_token"})
+
+    log_event("auth_service", f"Email verified: {email}", action="EMAIL_VERIFIED")
+
+    return jsonify({"message": "Email verified successfully. You can now log in."}), 200
 
 
 @auth_bp.route('/login', methods=['POST'])
@@ -240,6 +361,7 @@ def login():
     data = request.get_json(force=True, silent=True) or {}
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
+    device_id = data.get('device_id', '').strip()
 
     if not email or not password:
         return jsonify({"error": "Email and password are required"}), 400
@@ -249,6 +371,73 @@ def login():
     if not user or not check_password_hash(user['password'], password):
         log_event("auth_service", f"Failed login attempt for email: {email}", action="LOGIN_FAILED")
         return jsonify({"error": "Invalid email or password"}), 401
+
+    # Check if email is verified
+    if not user.get('email_verified', False):
+        # Send a fresh OTP and return a registration_token-like response
+        otp_code = "".join([str(secrets.randbelow(10)) for _ in range(6)])
+        expiry = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+        otps_col.update_one(
+            {"email": email, "purpose": "verify_email"},
+            {"$set": {"otp": otp_code, "expiry": expiry, "purpose": "verify_email", "created_at": datetime.datetime.utcnow()}},
+            upsert=True
+        )
+        send_otp_email(email, otp_code, purpose="verify_email")
+        registration_token = generate_purpose_token(
+            "verify_email",
+            email,
+            extra_payload={"user_id": str(user['_id']), "username": user['username']}
+        )
+        return jsonify({
+            "error": "Email not verified. Please verify your email first.",
+            "requires_verification": True,
+            "registration_token": registration_token,
+            "email": email,
+        }), 403
+
+    known_devices = user.get('known_devices', [])
+    is_known_device = device_id and device_id in known_devices
+
+    if not is_known_device:
+        # Reuse existing pending OTP if still valid
+        existing_otp = otps_col.find_one({"email": email, "purpose": "verify_login"})
+        if existing_otp and existing_otp.get('expiry') and existing_otp['expiry'] > datetime.datetime.utcnow():
+            existing_token = otps_col.find_one({"email": email, "purpose": "verify_login_token"})
+            if existing_token:
+                return jsonify({
+                    "requires_otp": True,
+                    "login_token": existing_token['token'],
+                    "email": email,
+                    "message": "Masukkan kode OTP yang sudah dikirim ke email Anda."
+                }), 200
+
+        # Send new OTP for new device verification
+        otp_code = "".join([str(secrets.randbelow(10)) for _ in range(6)])
+        expiry = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+        otps_col.update_one(
+            {"email": email, "purpose": "verify_login"},
+            {"$set": {"otp": otp_code, "expiry": expiry, "purpose": "verify_login", "device_id": device_id, "created_at": datetime.datetime.utcnow()}},
+            upsert=True
+        )
+        send_otp_email(email, otp_code, purpose="verify_login")
+
+        login_token = generate_purpose_token(
+            "verify_login",
+            email,
+            extra_payload={"user_id": str(user['_id']), "device_id": device_id}
+        )
+        # Store login_token for reuse on page reload
+        otps_col.update_one(
+            {"email": email, "purpose": "verify_login_token"},
+            {"$set": {"token": login_token, "expiry": expiry, "created_at": datetime.datetime.utcnow()}},
+            upsert=True
+        )
+        return jsonify({
+            "requires_otp": True,
+            "login_token": login_token,
+            "email": email,
+            "message": "New device detected. Please check your email for OTP."
+        }), 200
 
     token = generate_token(user)
     log_event(
@@ -261,13 +450,16 @@ def login():
         visibility="app",
         severity="info",
     )
+    role = user.get('role', 'member')
+    redirect_map = {"owner": "/dashboard", "developer": "/console", "superadmin": "/developers", "member": "/dashboard"}
     response = jsonify({
         "token": token,
+        "redirect": redirect_map.get(role, "/dashboard"),
         "user": {
             "id": str(user['_id']),
             "username": user['username'],
             "email": user['email'],
-            "role": user.get('role', 'member'),
+            "role": role,
             "org_id": user.get('org_id'),
             "delegation_id": user.get('delegation_id')
         }
@@ -281,6 +473,179 @@ def login():
         path="/"
     )
     return response, 200
+
+
+@auth_bp.route('/verify-login', methods=['POST'])
+def verify_login():
+    """
+    Verify new device login using OTP.
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - login_token
+            - otp
+          properties:
+            login_token:
+              type: string
+            otp:
+              type: string
+    responses:
+      200:
+        description: Device verified and logged in
+      400:
+        description: Invalid or expired OTP
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    token = data.get('login_token', '').strip()
+    otp_input = data.get('otp', '').strip()
+
+    if not token or not otp_input:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        payload = verify_purpose_token(token, "verify_login")
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Login token has expired. Please login again."}), 400
+    except Exception:
+        return jsonify({"error": "Invalid login token"}), 400
+
+    email = payload.get('email')
+    device_id = payload.get('device_id', '')
+
+    otp_record = otps_col.find_one({"email": email, "purpose": "verify_login"})
+    if not otp_record:
+        return jsonify({"error": "No OTP found. Please login again."}), 400
+
+    if otp_record['otp'] != otp_input:
+        return jsonify({"error": "Invalid OTP code"}), 400
+
+    if datetime.datetime.utcnow() > otp_record['expiry']:
+        return jsonify({"error": "OTP has expired"}), 400
+
+    # Add device to known devices
+    if device_id:
+        users_col.update_one(
+            {"email": email},
+            {"$addToSet": {"known_devices": device_id}}
+        )
+
+    # Delete used OTP and token
+    otps_col.delete_one({"email": email, "purpose": "verify_login"})
+    otps_col.delete_one({"email": email, "purpose": "verify_login_token"})
+
+    # Generate full auth token
+    user = users_col.find_one({"email": email})
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    auth_token = generate_token(user)
+    role = user.get('role', 'member')
+    redirect_map = {"owner": "/dashboard", "developer": "/console", "superadmin": "/developers", "member": "/dashboard"}
+
+    log_event(
+        "auth_service",
+        f"User logged in from new device: {user['username']}",
+        user_id=str(user['_id']),
+        org_id=user.get('org_id'),
+        action="LOGIN_NEW_DEVICE",
+        audience="owner" if role == 'owner' else "user",
+        visibility="app",
+        severity="info",
+    )
+
+    response = jsonify({
+        "token": auth_token,
+        "redirect": redirect_map.get(role, "/dashboard"),
+        "user": {
+            "id": str(user['_id']),
+            "username": user['username'],
+            "email": user['email'],
+            "role": role,
+            "org_id": user.get('org_id'),
+            "delegation_id": user.get('delegation_id')
+        }
+    })
+    response.set_cookie(
+        key="token",
+        value=auth_token,
+        httponly=True,
+        samesite="Lax",
+        max_age=Config.JWT_EXP_HOURS * 3600,
+        path="/"
+    )
+    return response, 200
+
+
+@auth_bp.route('/resend-otp', methods=['POST'])
+def resend_otp():
+    """
+    Resend OTP for email verification or login verification.
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - purpose
+          properties:
+            email:
+              type: string
+            purpose:
+              type: string
+              enum: [verify_email, verify_login]
+    responses:
+      200:
+        description: OTP resent
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    email = data.get('email', '').strip().lower()
+    purpose = data.get('purpose', '').strip()
+
+    if not email or not purpose:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    if purpose not in ("verify_email", "verify_login"):
+        return jsonify({"error": "Invalid purpose"}), 400
+
+    # Check OTP record exists with the given purpose
+    existing = otps_col.find_one({"email": email, "purpose": purpose})
+    if not existing:
+        return jsonify({"error": "No pending verification found for this email"}), 400
+
+    # Generate new OTP
+    otp_code = "".join([str(secrets.randbelow(10)) for _ in range(6)])
+    expiry = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+
+    otps_col.update_one(
+        {"email": email, "purpose": purpose},
+        {"$set": {"otp": otp_code, "expiry": expiry, "created_at": datetime.datetime.utcnow()}}
+    )
+
+    send_otp_email(email, otp_code, purpose=purpose)
+
+    log_event("auth_service", f"OTP resent to {email} for {purpose}", action="OTP_RESENT")
+
+    return jsonify({"message": "OTP has been resent to your email"}), 200
 
 
 @auth_bp.route('/profile', methods=['GET'])
@@ -430,7 +795,7 @@ def update_profile(current_user):
         users_col.update_one({"_id": user["_id"]}, {"$set": update_fields})
 
     if org_name:
-        if current_user.get('role') != 'owner':
+        if current_user.get('role') not in ('owner', 'admin'):
             return jsonify({"error": "Only organization owner can rename the organization"}), 403
         if len(org_name) < 3 or len(org_name) > 80:
             return jsonify({"error": "Organization name must be between 3 and 80 characters"}), 400
@@ -1779,6 +2144,230 @@ def google_callback():
     except Exception as e:
         log_event("auth_service", f"Error sewaktu Google Callback: {str(e)}", user_id=user_id, action="GOOGLE_CALLBACK_ERROR", severity="error")
         return "<h3>Terjadi kesalahan sistem sewaktu Google Drive callback</h3>", 500
+
+
+# ─── Admin / Developers Endpoints ───────────────────────────────
+
+@auth_bp.route('/developers/login', methods=['POST'])
+def developers_login():
+    data = request.get_json(force=True, silent=True) or {}
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+    user = users_col.find_one({"email": email, "role": "admin"})
+    if not user or not check_password_hash(user['password'], password):
+        return jsonify({"error": "Invalid admin credentials"}), 401
+    token = generate_token(user)
+    response = jsonify({"token": token, "redirect": "/developers", "user": {"id": str(user['_id']), "username": user['username'], "email": user['email'], "role": "admin"}})
+    response.set_cookie("token", token, httponly=True, samesite="Lax", max_age=Config.JWT_EXP_HOURS * 3600, path="/")
+    return response, 200
+
+@auth_bp.route('/developers/stats', methods=['GET'])
+@token_required
+@role_required('admin')
+def developers_stats(current_user):
+    total_docs = docs_col.count_documents({})
+    total_chats = chats_col.count_documents({})
+    return jsonify({
+        "total_organizations": orgs_col.count_documents({}),
+        "total_users": users_col.count_documents({}),
+        "total_documents": total_docs,
+        "total_chat_sessions": total_chats,
+    }), 200
+
+@auth_bp.route('/developers/organizations', methods=['GET'])
+@token_required
+@role_required('admin')
+def developers_organizations(current_user):
+    orgs = list(orgs_col.find())
+    result = []
+    for org in orgs:
+        oid = str(org['_id'])
+        members = users_col.count_documents({"org_id": oid})
+        docs_c = docs_col.count_documents({"org_id": oid})
+        created = org.get("created_at")
+        if created:
+            created_str = created.isoformat() if hasattr(created, 'isoformat') else str(created)
+        else:
+            created_str = None
+        result.append({
+            "id": oid,
+            "name": org.get("name"),
+            "invite_code": org.get("invite_code"),
+            "created_at": created_str,
+            "members": members,
+            "documents": docs_c,
+        })
+    return jsonify(result), 200
+
+@auth_bp.route('/developers/organization/<org_id>', methods=['DELETE'])
+@token_required
+@role_required('admin')
+def developers_delete_org(current_user, org_id):
+    try:
+        org = orgs_col.find_one({"_id": ObjectId(org_id)})
+    except Exception:
+        return jsonify({"error": "Invalid org ID"}), 400
+    if not org:
+        return jsonify({"error": "Organization not found"}), 404
+    org_name = org.get("name", "Unknown")
+    users_col.delete_many({"org_id": org_id})
+    docs_col.delete_many({"org_id": org_id})
+    reminders_col.delete_many({"org_id": org_id})
+    invitations_col.delete_many({"org_id": org_id})
+    delegations_col.delete_many({"org_id": org_id})
+    assets_col.delete_many({"org_id": org_id})
+    logs_col.delete_many({"org_id": org_id})
+    orgs_col.delete_one({"_id": ObjectId(org_id)})
+    log_event("auth_service", f"Admin deleted organization '{org_name}' ({org_id})", action="ADMIN_DELETE_ORG")
+    return jsonify({"message": f"Organization '{org_name}' and all associated data deleted"}), 200
+
+@auth_bp.route('/developers/users', methods=['GET'])
+@token_required
+@role_required('admin')
+def developers_users(current_user):
+    users_list = list(users_col.find())
+    result = []
+    for u in users_list:
+        org_name = None
+        if u.get("org_id"):
+            org = orgs_col.find_one({"_id": ObjectId(u['org_id']) if isinstance(u['org_id'], str) else u['org_id']})
+            if org:
+                org_name = org.get("name")
+        delegation_name = None
+        if u.get("delegation_id"):
+            try:
+                del_obj = delegations_col.find_one({"_id": ObjectId(u["delegation_id"])})
+                delegation_name = del_obj.get("name") if del_obj else None
+            except Exception:
+                pass
+        created = u.get("created_at")
+        if created:
+            created_str = created.isoformat() if hasattr(created, 'isoformat') else str(created)
+        else:
+            created_str = None
+        result.append({
+            "id": str(u['_id']),
+            "username": u.get("username"),
+            "email": u.get("email"),
+            "role": u.get("role"),
+            "org_id": u.get("org_id"),
+            "org_name": org_name,
+            "delegation_id": u.get("delegation_id"),
+            "delegation_name": delegation_name,
+            "created_at": created_str,
+        })
+    return jsonify(result), 200
+
+@auth_bp.route('/developers/user/<user_id>', methods=['DELETE'])
+@token_required
+@role_required('admin')
+def developers_delete_user(current_user, user_id):
+    try:
+        user = users_col.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        return jsonify({"error": "Invalid user ID"}), 400
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    if user.get("role") in ("admin", "owner"):
+        return jsonify({"error": "Cannot delete admin or owner user. Delete the organization instead."}), 403
+    username = user.get("username", "Unknown")
+    org_id = user.get("org_id")
+    if org_id:
+        owner = users_col.find_one({"org_id": org_id, "role": "owner"})
+        if owner:
+            owner_id = str(owner["_id"])
+            docs_col.update_many({"uploaded_by": user_id}, {"$set": {"uploaded_by": owner_id}})
+            docs_col.update_many({"uploaded_by": ObjectId(user_id)}, {"$set": {"uploaded_by": owner_id}})
+        reminders_col.delete_many({"created_by": user_id})
+        reminders_col.delete_many({"created_by": ObjectId(user_id)})
+    users_col.delete_one({"_id": ObjectId(user_id)})
+    log_event("auth_service", f"Admin deleted user '{username}' ({user_id})", action="ADMIN_DELETE_USER")
+    return jsonify({"message": f"User '{username}' deleted"}), 200
+
+@auth_bp.route('/developers/activity-logs', methods=['GET'])
+@token_required
+@role_required('admin')
+def developers_activity_logs(current_user):
+    limit = request.args.get('limit', default=100, type=int)
+    limit = max(1, min(limit, 500))
+    logs = list(logs_col.find().sort("timestamp", -1).limit(limit))
+    result = []
+    for item in logs:
+        ts = item.get("timestamp")
+        result.append({
+            "id": str(item.get("_id")),
+            "service": item.get("service"),
+            "message": item.get("message"),
+            "action": item.get("action"),
+            "severity": item.get("severity", "info"),
+            "user_id": item.get("user_id"),
+            "org_id": item.get("org_id"),
+            "metadata": item.get("metadata", {}),
+            "timestamp": ts.isoformat() if ts else None,
+        })
+    return jsonify(result), 200
+
+@auth_bp.route('/developers/health', methods=['GET'])
+@token_required
+@role_required('admin')
+def developers_health(current_user):
+    services = {
+        "api-gateway": "http://api-gateway:5009",
+        "document-pipeline": "http://document-pipeline:5001",
+        "ai-service": "http://ai-service:5002",
+        "support-services": "http://support-services:5003",
+        "graphql-service": "http://graphql-service:5004",
+    }
+    result = {}
+    for name, url in services.items():
+        try:
+            r = requests.get(f"{url}/health", timeout=3)
+            result[name] = {"status": "healthy" if r.status_code == 200 else "degraded", "code": r.status_code}
+        except requests.RequestException:
+            result[name] = {"status": "unreachable", "code": None}
+    return jsonify(result), 200
+
+
+@auth_bp.route('/developers/document-trends', methods=['GET'])
+@token_required
+@role_required('admin')
+def developers_trends(current_user):
+    now = datetime.datetime.utcnow()
+    weeks = []
+    for i in range(7, -1, -1):
+        start = now - datetime.timedelta(days=i * 7 + 7)
+        end = now - datetime.timedelta(days=i * 7)
+        count = docs_col.count_documents({"uploaded_at": {"$gte": start, "$lt": end}})
+        label = start.strftime("%d %b")
+        weeks.append({"label": label, "count": count})
+    return jsonify(weeks), 200
+
+
+@auth_bp.route('/developers/instagram-insights', methods=['GET'])
+@token_required
+@role_required('admin')
+def developers_instagram(current_user):
+    try:
+        auth = request.headers.get("Authorization", "")
+        cookie_token = request.cookies.get("token", "")
+        headers = {}
+        if auth:
+            headers["Authorization"] = auth
+        elif cookie_token:
+            headers["Authorization"] = f"Bearer {cookie_token}"
+        date_from = request.args.get("date_from")
+        date_to = request.args.get("date_to")
+        target = "http://support-services:5003/insight/api/insights"
+        params = {}
+        if date_from:
+            params["date_from"] = date_from
+        if date_to:
+            params["date_to"] = date_to
+        resp = requests.get(target, headers=headers, params=params, timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        log_event("auth_service", f"Instagram insights error: {str(e)}", action="ADMIN_INSTAGRAM_ERROR", severity="error")
+        return jsonify({"error": str(e)}), 500
 
 
 @auth_bp.route('/health', methods=['GET'])

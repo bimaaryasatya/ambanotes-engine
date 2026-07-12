@@ -1,0 +1,19 @@
+﻿FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY docker/requirements/core.txt docker/requirements/
+COPY docker/requirements/gateway.txt docker/requirements/
+RUN pip install --no-cache-dir -r docker/requirements/gateway.txt
+
+COPY common/ common/
+COPY auth_service/ auth_service/
+COPY api_gateway/ api_gateway/
+COPY graphql_service/ graphql_service/
+COPY docker/entrypoints/ docker/entrypoints/
+
+EXPOSE 5009
+
+ENV GATEWAY_URL=http://api-gateway:5009
+
+CMD ["python", "docker/entrypoints/run_gateway.py"]

@@ -25,21 +25,31 @@ def detect_event(text):
     return "Lainnya"
 
 
-def generate_insight():
+def generate_insight(date_from=None, date_to=None):
     df = get_dataframe()
+
+    if df.empty:
+        return {"message": "No data"}
+
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+    if date_from:
+        df = df[df["date"] >= pd.to_datetime(date_from)]
+    if date_to:
+        df = df[df["date"] <= pd.to_datetime(date_to)]
 
     if df.empty:
         return {"message": "No data"}
 
     df["clean_caption"] = df["caption"].apply(clean_text)
 
-    df["date"] = pd.to_datetime(df["date"])
-
     df["year"] = df["date"].dt.year
     df["month"] = df["date"].dt.month
     df["day"] = df["date"].dt.day_name()
 
     df["event_category"] = df["clean_caption"].apply(detect_event)
+
+    likes = df["likes"].dropna()
 
     # Extract top keywords for word cloud
     word_counts = {}
@@ -58,9 +68,9 @@ def generate_insight():
             df["owner"].value_counts().head(5).to_dict(),
 
         "likes_distribution": {
-            "min": int(df["likes"].min()),
-            "max": int(df["likes"].max()),
-            "avg": float(df["likes"].mean())
+            "min": int(likes.min()) if not likes.empty else 0,
+            "max": int(likes.max()) if not likes.empty else 0,
+            "avg": float(likes.mean()) if not likes.empty else 0.0
         },
 
         "most_active_day":

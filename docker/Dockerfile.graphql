@@ -1,0 +1,16 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY docker/requirements/graphql.txt docker/requirements/
+RUN pip install --no-cache-dir -r docker/requirements/graphql.txt
+
+COPY common/ common/
+COPY graphql_service/ graphql_service/
+COPY docker/entrypoints/ docker/entrypoints/
+
+EXPOSE 5004
+
+ENV GATEWAY_URL=http://graphql-service:5004
+
+CMD ["python", "docker/entrypoints/run_graphql.py"]

@@ -1,0 +1,7 @@
+-r core.txt
+Pillow
+qrcode==8.2
+pandas==3.0.3
+nltk==3.9.4
+google-generativeai
+httpx

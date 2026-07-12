@@ -116,7 +116,7 @@ def generate_document_title(extracted_text, filename):
         }
 
         payload = {
-            "model": "mistral-small-latest",
+            "model": "mistral-large-latest",
             "messages": [
                 {"role": "user", "content": prompt}
             ],
@@ -151,11 +151,7 @@ def generate_security_suggestion(doc_data):
         "Tugas Anda: Buatlah 1-2 kalimat saran keamanan yang ramah, profesional, dan meyakinkan dalam bahasa Indonesia.\n"
         "Instruksi Khusus:\n"
         "1. JANGAN gunakan emoji, emotikon, atau ikon dekoratif apa pun (seperti 🔒, 🤖, dll).\n"
-        "2. Gunakan markdown cetak tebal (**teks**) HANYA pada informasi penting berikut (jika datanya ada):\n"
-        "   - Nomor surat\n"
-        "   - Kategori/klasifikasi\n"
-        "   - Perihal/subjek surat\n"
-        "   - Nama instansi/organisasi penerbit\n"
+        "2. JANGAN gunakan markdown.\n"
         "3. Jelaskan bahwa dokumen ini dideteksi penting/sensitif dan disarankan agar pengguna menghubungkan Google Drive untuk memindahkan berkas fisik asli dari server umum kami ke cloud pribadi mereka untuk keamanan penuh.\n\n"
         "Informasi Berkas:\n"
         f"- Kategori Berkas: {kategori}\n"
@@ -168,6 +164,7 @@ def generate_security_suggestion(doc_data):
     try:
         api_key = Config.MISTRAL_API_KEY
         if not api_key:
+            log_event("document_service", "Gagal generate security suggestion via Mistral: API Key is missing", action="MISTRAL_SUGGESTION_ERROR")
             return f"Dokumen Anda yang dikategorikan sebagai **{kategori}** terdeteksi penting. Silakan hubungkan Google Drive untuk memindahkan dokumen fisik dari server ke ruang penyimpanan pribadi Anda."
             
         headers = {
@@ -176,7 +173,7 @@ def generate_security_suggestion(doc_data):
         }
         
         payload = {
-            "model": "mistral-small-latest",
+            "model": "mistral-large-latest",
             "messages": [
                 {"role": "user", "content": prompt}
             ],
@@ -293,10 +290,26 @@ def upload_document(current_user):
 
     doc_id = uuid.uuid4().hex
     title = generate_document_title(extracted_text, file.filename)
+
+    # Generate AI summary via the existing /ai/summarize endpoint
+    summary = extracted_text[:200] + "..." if len(extracted_text) > 200 else extracted_text
+    try:
+        sum_res = requests.post(
+            "http://ai-service:5002/ai/summarize",
+            json={"text": extracted_text},
+            headers=_get_auth_header(),
+            timeout=15
+        )
+        if sum_res.status_code == 200:
+            summary = sum_res.json().get("summary", summary)
+    except Exception as e:
+        log_event("document_service", f"Summary generation failed: {str(e)}", action="SUMMARY_FAILED", severity="warning")
+
     doc_data = {
         "doc_id": doc_id,
         "filename": file.filename,
         "title": title,
+        "summary": summary,
         "content": extracted_text,
         "classification": classification,
         "entities": entities,
@@ -346,6 +359,7 @@ def list_documents(current_user):
         "doc_id": 1,
         "filename": 1,
         "title": 1,
+        "summary": 1,
         "classification": 1,
         "entities": 1,
         "uploaded_at": 1,

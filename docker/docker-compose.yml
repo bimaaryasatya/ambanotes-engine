@@ -1,0 +1,72 @@
+﻿services:
+
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api-gateway
+    container_name: ambanotes-gateway
+    ports:
+      - "5009:5009"
+    environment:
+      - GATEWAY_URL=http://api-gateway:5009
+    env_file:
+      - ../.env
+    networks:
+      - ambanotes-network
+    restart: unless-stopped
+
+  document-pipeline:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.document-pipeline
+    container_name: ambanotes-document-pipeline
+    environment:
+      - GATEWAY_URL=http://localhost:5001
+    env_file:
+      - ../.env
+    networks:
+      - ambanotes-network
+    restart: unless-stopped
+
+  ai-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ai-service
+    container_name: ambanotes-ai
+    environment:
+      - GATEWAY_URL=http://ai-service:5002
+    env_file:
+      - ../.env
+    networks:
+      - ambanotes-network
+    restart: unless-stopped
+
+  support-services:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.support-services
+    container_name: ambanotes-support
+    environment:
+      - GATEWAY_URL=http://localhost:5003
+    env_file:
+      - ../.env
+    networks:
+      - ambanotes-network
+    restart: unless-stopped
+
+  graphql-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.graphql
+    container_name: ambanotes-graphql
+    environment:
+      - GATEWAY_URL=http://graphql-service:5004
+    env_file:
+      - ../.env
+    networks:
+      - ambanotes-network
+    restart: unless-stopped
+
+networks:
+  ambanotes-network:
+    driver: bridge

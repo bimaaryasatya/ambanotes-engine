@@ -1,0 +1,20 @@
+﻿FROM python:3.12
+
+WORKDIR /app
+
+COPY docker/requirements/core.txt docker/requirements/
+COPY docker/requirements/doc-pipeline.txt docker/requirements/
+RUN pip install --no-cache-dir -r docker/requirements/doc-pipeline.txt
+
+COPY common/ common/
+COPY document_service/ document_service/
+COPY classification_service/ classification_service/
+COPY ner_service/ ner_service/
+COPY ocr_service/ ocr_service/
+COPY docker/entrypoints/ docker/entrypoints/
+
+EXPOSE 5001
+
+ENV GATEWAY_URL=http://localhost:5001
+
+CMD ["python", "docker/entrypoints/run_document_pipeline.py"]

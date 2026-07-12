@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - AmbaNotes</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons (loaded synchronously to prevent race conditions in rendering) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+        darkMode: 'class'
+    }
+  </script>
+  <script>
+    // Immediately apply theme before HTML renders to prevent white flash
+    (function() {
+        const savedTheme = localStorage.getItem('theme-preference') || 'system';
+        let actualTheme = savedTheme;
+        if (savedTheme === 'system') {
+            actualTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        if (actualTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    })();
+  </script>
+  <style>
+    body {
+        font-family: 'Inter', sans-serif;
+        transition: background-color 0.2s, color 0.2s;
+    }
+
+    /* Dark Theme Global Rules */
+    .dark body {
+        background-color: #0b0f19 !important; /* Slate 950 */
+        color: #f1f5f9 !important;
+    }
+    .dark aside {
+        background-color: #0f172a !important; /* Slate 900 */
+        border-color: #1e293b !important;
+    }
+    .dark aside nav button {
+        color: #94a3b8 !important;
+    }
+    .dark aside nav button:hover {
+        background-color: #1e293b !important;
+        color: #f1f5f9 !important;
+    }
+    .dark .active-tab {
+        background-color: #1e293b !important;
+        color: #818cf8 !important; /* Indigo 400 */
+        border-left-color: #4f46e5 !important;
+    }
+    .dark aside div.bg-slate-50 {
+        background-color: #1e293b !important;
+        border-color: #1e293b !important;
+    }
+    .dark aside div.bg-slate-50 h4 {
+        color: #f1f5f9 !important;
+    }
+    .dark aside div.bg-slate-50 button, .dark aside div.bg-slate-50 a {
+        background-color: #0f172a !important;
+        border-color: #1e293b !important;
+        color: #94a3b8 !important;
+    }
+    .dark aside div.bg-slate-50 button:hover, .dark aside div.bg-slate-50 a:hover {
+        background-color: #1e293b !important;
+        color: #f1f5f9 !important;
+    }
+    
+    .dark header {
+        background-color: #0f172a !important;
+        border-color: #1e293b !important;
+    }
+    .dark header h2 {
+        color: #ffffff !important;
+    }
+    .dark header p {
+        color: #94a3b8 !important;
+    }
+
+    /* Cards and sections */
+    .dark .bg-white {
+        background-color: #0f172a !important;
+        border-color: #1e293b !important;
+        color: #f1f5f9 !important;
+    }
+    .dark .bg-white input, .dark .bg-white select, .dark .bg-white textarea {
+        background-color: #1e293b !important;
+        border-color: #334155 !important;
+        color: #f1f5f9 !important;
+    }
+    .dark .bg-white input::placeholder {
+        color: #64748b !important;
+    }
+    .dark .bg-white select option {
+        background-color: #0f172a !important;
+        color: #f1f5f9 !important;
+    }
+    .dark .bg-white select option:hover {
+        background-color: #1e293b !important;
+    }
+
+    /* Responsive Slate text overrides for dark mode */
+    .dark .text-slate-900 { color: #f1f5f9 !important; }
+    .dark .text-slate-800 { color: #e2e8f0 !important; }
+    .dark .text-slate-700 { color: #cbd5e1 !important; }
+    .dark .text-slate-600 { color: #cbd5e1 !important; }
+    .dark .text-slate-500 { color: #94a3b8 !important; }
+    .dark .text-slate-400 { color: #64748b !important; }
+
+    /* Tables dark styling */
+    .dark thead {
+        background-color: #1e293b !important;
+        border-bottom-color: #334155 !important;
+    }
+    .dark th {
+        color: #94a3b8 !important;
+        border-color: #1e293b !important;
+    }
+    .dark td {
+        border-color: #1e293b !important;
+    }
+    .dark tr:hover {
+        background-color: #1e293b !important;
+    }
+    .dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+        border-color: #1e293b !important;
+    }
+    .dark .border-slate-200, .dark .border-slate-100 {
+        border-color: #1e293b !important;
+    }
+
+    /* Clickable and active colors */
+    .dark .text-indigo-600 { color: #818cf8 !important; }
+    .dark .text-indigo-600:hover { color: #a5b4fc !important; }
+    .dark .text-slate-600 { color: #cbd5e1 !important; }
+    .dark .text-slate-600:hover { color: #f1f5f9 !important; }
+    
+    /* Container background overrides */
+    .dark .bg-slate-50 {
+        background-color: #1e293b !important;
+        border-color: #334155 !important;
+    }
+    
+    /* Badges overrides for dark theme */
+    .dark .bg-slate-100 { background-color: #1e293b !important; color: #94a3b8 !important; }
+    .dark .bg-slate-200 { background-color: #334155 !important; color: #cbd5e1 !important; }
+    .dark .bg-indigo-100 { background-color: rgba(79, 70, 229, 0.2) !important; color: #818cf8 !important; }
+    .dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.2) !important; color: #f87171 !important; }
+    .dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.2) !important; color: #fbbf24 !important; }
+    .dark .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.2) !important; color: #34d399 !important; }
+
+    .active-tab {
+        background-color: #f1f5f9;
+        color: #4f46e5;
+        border-left: 4px solid #4f46e5;
+        font-weight: 600;
+    }
+
+    .stat-card { transition: all 0.2s ease; }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.08); }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: #f1f5f9;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .pill-success { background: #dcfce7; color: #166534; }
+    .pill-danger { background: #fef2f2; color: #991b1b; }
+    .pill-warning { background: #fef9c3; color: #854d0e; }
+    .pill-info { background: #dbeafe; color: #1e40af; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex">
+  <div class="flex w-full min-h-screen">
+    <!-- SIDEBAR -->
+    <aside class="w-64 bg-white border-r border-slate-200 flex flex-col justify-between flex-shrink-0 h-screen sticky top-0">
+      <div>
+        <!-- Sidebar Header / Logo -->
+        <div class="p-5 border-b border-slate-200">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-md">
+              <i data-lucide="terminal" class="w-5 h-5 text-white"></i>
+            </div>
+            <div>
+              <h1 class="font-extrabold text-slate-900 text-sm tracking-tight">Developers</h1>
+              <p class="text-[10px] text-slate-400 font-medium">AmbaNotes Panel</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Navigation Links -->
+        <nav class="p-4 space-y-1">
+          <button class="sidebar-link active-tab w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors" data-tab="overview" id="nav-overview">
+            <i data-lucide="layout-dashboard" class="w-4 h-4"></i><span>Overview</span>
+          </button>
+          <button class="sidebar-link w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors" data-tab="organizations" id="nav-organizations">
+            <i data-lucide="building-2" class="w-4 h-4"></i><span>Organizations</span>
+          </button>
+          <button class="sidebar-link w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors" data-tab="users" id="nav-users">
+            <i data-lucide="users" class="w-4 h-4"></i><span>Users</span>
+          </button>
+          <button class="sidebar-link w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors" data-tab="activity-logs" id="nav-activity-logs">
+            <i data-lucide="scroll-text" class="w-4 h-4"></i><span>Activity Logs</span>
+          </button>
+          <button class="sidebar-link w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors" data-tab="instagram" id="nav-instagram">
+            <i data-lucide="trending-up" class="w-4 h-4"></i><span>Instagram Insights</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- User Profile Card in Sidebar Footer -->
+      <div class="p-4 border-t border-slate-200 bg-slate-50 flex flex-col space-y-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-full bg-purple-100 border border-purple-200 text-purple-700 flex items-center justify-center font-bold text-sm">
+            {{ user.username[:2].upper() if user.username else 'SA' }}
+          </div>
+          <div class="overflow-hidden">
+            <h4 class="font-semibold text-sm truncate">{{ user.username }}</h4>
+            <span class="text-xs text-purple-600 font-medium">Admin</span>
+          </div>
+        </div>
+        <div class="flex space-x-2">
+          {% if user.get('org_id') %}
+          <a href="/dashboard" class="flex-1 flex items-center justify-center space-x-1.5 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i><span>Dashboard</span>
+          </a>
+          {% endif %}
+          <a href="/logout" class="flex-1 flex items-center justify-center space-x-1.5 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-red-600 bg-white hover:bg-red-50 transition-colors dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-red-950/20">
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i><span>Logout</span>
+          </a>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-grow flex flex-col min-w-0 h-screen overflow-y-auto bg-slate-50">
+      <!-- TOP HEADER BAR -->
+      <header class="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
+        <div>
+          <h2 id="page-title" class="text-xl font-bold text-slate-900">System Overview</h2>
+          <p id="page-subtitle" class="text-xs text-slate-500">Real-time statistics across all organizations</p>
+        </div>
+        
+        <div class="flex items-center space-x-3">
+          <!-- Theme Switcher Button -->
+          <button onclick="cycleTheme()" id="theme-toggle-btn"
+              class="flex items-center space-x-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+              <i data-lucide="monitor" class="w-4 h-4"></i>
+              <span>Tema: Sistem</span>
+          </button>
+
+          <!-- Global Refresh Button -->
+          <button id="global-refresh-btn" onclick="loadOverviewStats()" class="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>Refresh</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- CONTENT TAB PANELS -->
+      <div class="p-8 flex-grow space-y-8">
+
+        <!-- ─── OVERVIEW TAB ─── -->
+        <div id="tab-overview" class="tab-content fade-in space-y-8">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5" id="overview-cards">
+            <div class="stat-card bg-white p-6 rounded-xl border border-slate-200 shadow-sm"><div class="flex items-center justify-between"><div><p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Organizations</p><h3 class="text-3xl font-bold text-slate-900 mt-2" id="stat-orgs">-</h3></div><div class="p-3 bg-purple-50 text-purple-600 rounded-lg dark:bg-purple-950/30 dark:text-purple-400"><i data-lucide="building-2" class="w-6 h-6"></i></div></div></div>
+            <div class="stat-card bg-white p-6 rounded-xl border border-slate-200 shadow-sm"><div class="flex items-center justify-between"><div><p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Users</p><h3 class="text-3xl font-bold text-slate-900 mt-2" id="stat-users">-</h3></div><div class="p-3 bg-blue-50 text-blue-600 rounded-lg dark:bg-blue-950/30 dark:text-blue-400"><i data-lucide="users" class="w-6 h-6"></i></div></div></div>
+            <div class="stat-card bg-white p-6 rounded-xl border border-slate-200 shadow-sm"><div class="flex items-center justify-between"><div><p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Documents</p><h3 class="text-3xl font-bold text-slate-900 mt-2" id="stat-docs">-</h3></div><div class="p-3 bg-amber-50 text-amber-600 rounded-lg dark:bg-amber-950/30 dark:text-amber-400"><i data-lucide="file-text" class="w-6 h-6"></i></div></div></div>
+            <div class="stat-card bg-white p-6 rounded-xl border border-slate-200 shadow-sm"><div class="flex items-center justify-between"><div><p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Chat Sessions</p><h3 class="text-3xl font-bold text-slate-900 mt-2" id="stat-chats">-</h3></div><div class="p-3 bg-green-50 text-green-600 rounded-lg dark:bg-green-950/30 dark:text-green-400"><i data-lucide="message-square" class="w-6 h-6"></i></div></div></div>
+          </div>
+
+          <!-- Document Trends Chart -->
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <h3 class="font-bold text-slate-800 text-sm mb-4">Document Upload Trends (Weekly)</h3>
+            <div class="h-64"><canvas id="trendChart"></canvas></div>
+          </div>
+
+          <!-- Service Health -->
+          <div class="space-y-4">
+            <h3 class="font-bold text-slate-800 text-sm">Service Health</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4" id="health-cards">
+              <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center"><div class="w-3 h-3 rounded-full mx-auto mb-2 bg-slate-300" id="health-api-gateway"></div><p class="text-xs font-semibold text-slate-700">API Gateway</p><p class="text-xs text-slate-400 mt-0.5" id="health-api-gateway-text">...</p></div>
+              <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center"><div class="w-3 h-3 rounded-full mx-auto mb-2 bg-slate-300" id="health-document-pipeline"></div><p class="text-xs font-semibold text-slate-700">Document Pipeline</p><p class="text-xs text-slate-400 mt-0.5" id="health-document-pipeline-text">...</p></div>
+              <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center"><div class="w-3 h-3 rounded-full mx-auto mb-2 bg-slate-300" id="health-ai-service"></div><p class="text-xs font-semibold text-slate-700">AI Service</p><p class="text-xs text-slate-400 mt-0.5" id="health-ai-service-text">...</p></div>
+              <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center"><div class="w-3 h-3 rounded-full mx-auto mb-2 bg-slate-300" id="health-support-services"></div><p class="text-xs font-semibold text-slate-700">Support Services</p><p class="text-xs text-slate-400 mt-0.5" id="health-support-services-text">...</p></div>
+              <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center"><div class="w-3 h-3 rounded-full mx-auto mb-2 bg-slate-300" id="health-graphql-service"></div><p class="text-xs font-semibold text-slate-700">GraphQL Service</p><p class="text-xs text-slate-400 mt-0.5" id="health-graphql-service-text">...</p></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── ORGANIZATIONS TAB ─── -->
+        <div id="tab-organizations" class="tab-content fade-in hidden">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-xs text-slate-500 font-semibold uppercase tracking-wider bg-slate-50 border-b border-slate-200">
+                    <th class="p-4">Name</th>
+                    <th class="p-4">Invite Code</th>
+                    <th class="p-4">Members</th>
+                    <th class="p-4">Documents</th>
+                    <th class="p-4">Created</th>
+                    <th class="p-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="orgs-table-body" class="divide-y divide-slate-200">
+                  <tr><td colspan="6" class="p-8 text-center text-slate-400">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── USERS TAB ─── -->
+        <div id="tab-users" class="tab-content fade-in hidden">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-xs text-slate-500 font-semibold uppercase tracking-wider bg-slate-50 border-b border-slate-200">
+                    <th class="p-4">Username</th>
+                    <th class="p-4">Email</th>
+                    <th class="p-4">Role</th>
+                    <th class="p-4">Organization</th>
+                    <th class="p-4">Delegation</th>
+                    <th class="p-4">Created</th>
+                    <th class="p-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="users-table-body" class="divide-y divide-slate-200">
+                  <tr><td colspan="7" class="p-8 text-center text-slate-400">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── ACTIVITY LOGS TAB ─── -->
+        <div id="tab-activity-logs" class="tab-content fade-in hidden">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-xs text-slate-500 font-semibold uppercase tracking-wider bg-slate-50 border-b border-slate-200">
+                    <th class="p-4">Time</th>
+                    <th class="p-4">Service</th>
+                    <th class="p-4">Action</th>
+                    <th class="p-4">Message</th>
+                    <th class="p-4 text-center">Severity</th>
+                  </tr>
+                </thead>
+                <tbody id="logs-table-body" class="divide-y divide-slate-200">
+                  <tr><td colspan="5" class="p-8 text-center text-slate-400">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── INSTAGRAM INSIGHTS TAB ─── -->
+        <div id="tab-instagram" class="tab-content fade-in hidden">
+          <!-- Date Filter -->
+          <div class="mb-6 flex flex-wrap items-center gap-3">
+            <div class="inline-flex rounded-md shadow-sm">
+              <button onclick="igSetDatePreset(7)" class="ig-date-preset px-3 py-1.5 border border-slate-300 bg-white text-xs font-medium text-slate-700 rounded-l-lg hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">7 Hari</button>
+              <button onclick="igSetDatePreset(30)" class="ig-date-preset px-3 py-1.5 border-t border-b border-r border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">30 Hari</button>
+              <button onclick="igSetDatePreset(90)" class="ig-date-preset px-3 py-1.5 border-t border-b border-r border-slate-300 bg-white text-xs font-medium text-slate-700 rounded-r-lg hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">3 Bulan</button>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-slate-500">
+              <input type="date" id="ig-date-from" class="border border-slate-300 rounded px-2 py-1.5 text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+              <span>s/d</span>
+              <input type="date" id="ig-date-to" class="border border-slate-300 rounded px-2 py-1.5 text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+              <button onclick="igApplyDateFilter()" class="bg-indigo-600 text-white rounded px-2.5 py-1.5 hover:bg-indigo-700 font-semibold transition-colors text-xs">Terapkan</button>
+            </div>
+          </div>
+          <div id="instagram-content">
+            <div class="text-center py-12 text-slate-400">Loading Instagram insights...</div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    // SWEETALERT HELPER
+    function showAlert(title, text, icon) {
+        return Swal.fire({
+            title: title,
+            text: text,
+            icon: icon,
+            confirmButtonColor: '#4f46e5'
+        });
+    }
+
+    // ─── Tab Switching + Auto-load ───
+    const tabLoaders = {
+      overview: loadOverviewStats,
+      organizations: loadOrganizations,
+      users: loadUsers,
+      'activity-logs': loadActivityLogs,
+      instagram: loadInstagramInsights,
+    };
+
+    document.querySelectorAll('.sidebar-link[data-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.sidebar-link').forEach(b => b.classList.remove('active-tab'));
+        btn.classList.add('active-tab');
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+        
+        const tab = btn.dataset.tab;
+        document.getElementById('tab-' + tab).classList.remove('hidden');
+
+        // Update Global Header Details
+        const pageTitle = document.getElementById('page-title');
+        const pageSubtitle = document.getElementById('page-subtitle');
+        const refreshBtn = document.getElementById('global-refresh-btn');
+
+        if (tab === 'overview') {
+            pageTitle.textContent = "System Overview";
+            pageSubtitle.textContent = "Real-time statistics across all organizations";
+            refreshBtn.onclick = loadOverviewStats;
+        } else if (tab === 'organizations') {
+            pageTitle.textContent = "Organizations";
+            pageSubtitle.textContent = "Manage all organizations";
+            refreshBtn.onclick = loadOrganizations;
+        } else if (tab === 'users') {
+            pageTitle.textContent = "Users";
+            pageSubtitle.textContent = "All users across the system";
+            refreshBtn.onclick = loadUsers;
+        } else if (tab === 'activity-logs') {
+            pageTitle.textContent = "Activity Logs";
+            pageSubtitle.textContent = "Global system-wide activity";
+            refreshBtn.onclick = loadActivityLogs;
+        } else if (tab === 'instagram') {
+            pageTitle.textContent = "Instagram Insights";
+            pageSubtitle.textContent = "Big data analytics from social media publications";
+            refreshBtn.onclick = loadInstagramInsights;
+        }
+
+        const loader = tabLoaders[tab];
+        if (loader) loader();
+      });
+    });
+
+    // ─── API Helper (cookie-based auth only) ───
+    async function api(path) {
+      const res = await fetch(path);
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || res.statusText); }
+      return res.json();
+    }
+    async function apiDelete(path) {
+      const res = await fetch(path, { method: 'DELETE' });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || res.statusText); }
+      return res.json();
+    }
+
+    async function showConfirm(title, text, confirmButtonText = 'Yes, Delete', callback) {
+        const isDark = document.documentElement.classList.contains('dark');
+        const result = await Swal.fire({
+            title: title,
+            text: text,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: confirmButtonText,
+            cancelButtonText: 'Cancel',
+            background: isDark ? '#0f172a' : '#ffffff',
+            color: isDark ? '#f1f5f9' : '#0f172a'
+        });
+        if (result.isConfirmed && callback) {
+            callback();
+        }
+    }
+
+    // ─── OverView Stats + Health + Trends ───
+    let trendChartInstance = null;
+
+    async function loadOverviewStats() {
+      try {
+        const d = await api('/auth/developers/stats');
+        document.getElementById('stat-orgs').textContent = d.total_organizations;
+        document.getElementById('stat-users').textContent = d.total_users;
+        document.getElementById('stat-docs').textContent = d.total_documents;
+        document.getElementById('stat-chats').textContent = d.total_chat_sessions;
+      } catch (e) { console.error('Stats error:', e); }
+      loadServiceHealth();
+      loadTrendChart();
+    }
+
+    async function loadServiceHealth() {
+      try {
+        const h = await api('/auth/developers/health');
+        Object.entries(h).forEach(([name, status]) => {
+          const dot = document.getElementById('health-' + name);
+          const txt = document.getElementById('health-' + name + '-text');
+          if (dot) {
+            dot.className = 'w-3 h-3 rounded-full mx-auto mb-2 ' + (status.status === 'healthy' ? 'bg-green-500' : status.status === 'degraded' ? 'bg-yellow-500' : 'bg-red-500');
+          }
+          if (txt) txt.textContent = status.status;
+        });
+      } catch (e) { console.error('Health error:', e); }
+    }
+
+    async function loadTrendChart() {
+      try {
+        const weeks = await api('/auth/developers/document-trends');
+        const labels = weeks.map(w => w.label);
+        const data = weeks.map(w => w.count);
+        if (trendChartInstance) trendChartInstance.destroy();
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        const isDark = document.documentElement.classList.contains('dark');
+        const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+        const textColor = isDark ? '#94a3b8' : '#64748b';
+        trendChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: { labels, datasets: [{ label: 'Documents Uploaded', data, borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,0.1)', fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#818cf8' }] },
+          options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { legend: { display: false } }, 
+            scales: { 
+              y: { beginAtZero: true, ticks: { stepSize: 1, color: textColor }, grid: { color: gridColor } }, 
+              x: { ticks: { color: textColor }, grid: { display: false } } 
+            } 
+          }
+        });
+      } catch (e) { console.error('Trend error:', e); }
+    }
+
+    // ─── Organizations ───
+    async function loadOrganizations() {
+      const tbody = document.getElementById('orgs-table-body');
+      tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-450 dark:text-slate-500">Loading...</td></tr>';
+      try {
+        const orgs = await api('/auth/developers/organizations');
+        if (!orgs.length) { tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-450 dark:text-slate-500">No organizations found</td></tr>'; return; }
+        tbody.innerHTML = orgs.map(o => `<tr class="border-b border-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+          <td class="p-4 font-semibold text-slate-900">${esc(o.name)}</td>
+          <td class="p-4"><span class="pill pill-info bg-indigo-50/50 text-indigo-600 dark:bg-indigo-950/20 dark:text-indigo-400">${esc(o.invite_code || '-')}</span></td>
+          <td class="p-4 font-bold text-slate-800">${o.members}</td>
+          <td class="p-4 text-slate-700">${o.documents}</td>
+          <td class="p-4 text-slate-500 text-xs">${o.created_at ? new Date(o.created_at).toLocaleDateString('id-ID') : '-'}</td>
+          <td class="p-4 text-center"><button onclick="confirmDeleteOrg('${o.id}','${esc(o.name)}')" class="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-semibold hover:bg-red-100 transition-colors dark:bg-red-950/20 dark:border-red-900/30 dark:text-red-400 dark:hover:bg-red-900/30">Delete</button></td>
+        </tr>`).join('');
+      } catch (e) { tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-red-400">Error: ${e.message}</td></tr>`; }
+    }
+
+    function confirmDeleteOrg(id, name) {
+      showConfirm('Delete Organization', `Delete "${name}" and ALL associated data (users, documents, reminders)?`, 'Yes, Delete', async () => {
+        try { 
+            await apiDelete('/auth/developers/organization/' + id); 
+            loadOrganizations(); 
+            loadOverviewStats(); 
+            await showAlert('Success', 'Organization deleted successfully!', 'success');
+        } catch (e) { 
+            await showAlert('Error', e.message, 'error'); 
+        }
+      });
+    }
+
+    // ─── Users ───
+    async function loadUsers() {
+      const tbody = document.getElementById('users-table-body');
+      tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-450 dark:text-slate-500">Loading...</td></tr>';
+      try {
+        const users = await api('/auth/developers/users');
+        if (!users.length) { tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-450 dark:text-slate-500">No users found</td></tr>'; return; }
+        tbody.innerHTML = users.map(u => {
+          const rolePill = u.role === 'admin' ? 'pill-warning' : u.role === 'owner' ? 'pill-success' : 'pill-info';
+          return `<tr class="border-b border-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+            <td class="p-4 font-semibold text-slate-900">${esc(u.username)}</td>
+            <td class="p-4 text-slate-600 text-xs">${esc(u.email)}</td>
+            <td class="p-4"><span class="pill ${rolePill}">${u.role}</span></td>
+            <td class="p-4 text-slate-600 text-xs font-medium">${esc(u.org_name || '-')}</td>
+            <td class="p-4 text-xs text-slate-500">${u.delegation_id ? u.delegation_id : '-'}</td>
+            <td class="p-4 text-slate-500 text-xs">${u.created_at ? new Date(u.created_at).toLocaleDateString('id-ID') : '-'}</td>
+            <td class="p-4 text-center">${u.role === 'admin' ? '<span class="text-xs text-slate-400">-</span>' : '<button onclick="confirmDeleteUser(\'' + u.id + '\',\'' + esc(u.username) + '\',\'' + u.role + '\',\'' + (u.org_id || '') + '\',\'' + esc(u.org_name || '') + '\')" class="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-semibold hover:bg-red-100 transition-colors dark:bg-red-950/20 dark:border-red-900/30 dark:text-red-400 dark:hover:bg-red-900/30">Delete</button>'}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) { tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-red-400">Error: ${e.message}</td></tr>`; }
+    }
+
+    function confirmDeleteUser(id, name, role, orgId, orgName) {
+      if (role === 'admin' || role === 'owner') {
+        showConfirm('Delete Organization', `Delete "${name}" (${role})? This will also delete the entire organization "${orgName}" and ALL associated data.`, 'Yes, Delete Everything', async () => {
+          try { 
+              await apiDelete('/auth/developers/organization/' + orgId); 
+              loadUsers(); 
+              loadOverviewStats(); 
+              await showAlert('Success', 'Organization deleted successfully!', 'success');
+          } catch (e) { 
+              await showAlert('Error', e.message, 'error'); 
+          }
+        });
+      } else {
+        showConfirm('Delete User', `Delete user "${name}"? Their documents will be reassigned to the org owner and their reminders will be deleted.`, 'Yes, Delete', async () => {
+          try { 
+              await apiDelete('/auth/developers/user/' + id); 
+              loadUsers(); 
+              loadOverviewStats(); 
+              await showAlert('Success', 'User deleted successfully!', 'success');
+          } catch (e) { 
+              await showAlert('Error', e.message, 'error'); 
+          }
+        });
+      }
+    }
+
+    // ─── Activity Logs ───
+    async function loadActivityLogs() {
+      const tbody = document.getElementById('logs-table-body');
+      tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-450 dark:text-slate-500">Loading...</td></tr>';
+      try {
+        const logs = await api('/auth/developers/activity-logs?limit=200');
+        if (!logs.length) { tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-450 dark:text-slate-500">No logs found</td></tr>'; return; }
+        tbody.innerHTML = logs.map(l => {
+          const sevPill = l.severity === 'error' ? 'pill-danger' : l.severity === 'warning' ? 'pill-warning' : 'pill-info';
+          let actionColor = 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300';
+          if (l.severity === 'error') actionColor = 'bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-400';
+          else if (l.severity === 'warning') actionColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400';
+          else if (l.severity === 'info') actionColor = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400';
+          
+          return `<tr class="border-b border-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/30 text-xs">
+            <td class="p-4 text-slate-550 whitespace-nowrap">${l.timestamp ? new Date(l.timestamp).toLocaleString('id-ID') : '-'}</td>
+            <td class="p-4 font-semibold text-slate-700">${esc(l.service)}</td>
+            <td class="p-4"><span class="pill ${sevPill}">${esc(l.action)}</span></td>
+            <td class="p-4 text-slate-650 max-w-xs truncate">${esc(l.message)}</td>
+            <td class="p-4 text-center"><span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${actionColor}">${l.severity}</span></td>
+          </tr>`;
+        }).join('');
+      } catch (e) { tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-red-400">Error: ${e.message}</td></tr>`; }
+    }
+
+    // ─── Instagram Insights ───
+    let barChartInstance = null;
+    let doughnutChartInstance = null;
+
+    function igBuildDateParams() {
+      const from = document.getElementById('ig-date-from').value;
+      const to = document.getElementById('ig-date-to').value;
+      const params = new URLSearchParams();
+      if (from) params.set('date_from', from);
+      if (to) params.set('date_to', to);
+      const qs = params.toString();
+      return qs ? '?' + qs : '';
+    }
+
+    function igSetDatePreset(days) {
+      const today = new Date();
+      const start = new Date(today.getTime() - (days * 24 * 60 * 60 * 1000));
+      document.getElementById('ig-date-to').value = today.toISOString().split('T')[0];
+      document.getElementById('ig-date-from').value = start.toISOString().split('T')[0];
+      loadInstagramInsights(true);
+    }
+
+    function igApplyDateFilter() {
+      loadInstagramInsights(true);
+    }
+
+    async function loadInstagramInsights(useDateFilter) {
+      const container = document.getElementById('instagram-content');
+      container.innerHTML = '<div class="text-center py-12 text-slate-400">Loading Instagram insights...</div>';
+      try {
+        const url = '/auth/developers/instagram-insights' + (useDateFilter ? igBuildDateParams() : '');
+        const data = await api(url);
+        if (!data || !data.total_posts) {
+          container.innerHTML = '<div class="text-center py-12 text-slate-400">No Instagram data available</div>';
+          return;
+        }
+        renderInstagramContent(data);
+      } catch (e) {
+        container.innerHTML = `<div class="text-center py-12 text-red-400">Error loading Instagram insights: ${e.message}</div>`;
+      }
+    }
+
+    function renderInstagramContent(data) {
+      const container = document.getElementById('instagram-content');
+      const isDark = document.documentElement.classList.contains('dark');
+      const textColor = isDark ? '#94a3b8' : '#64748b';
+      const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+      const dayTranslation = { "Sunday": "Minggu", "Monday": "Senin", "Tuesday": "Selasa", "Wednesday": "Rabu", "Thursday": "Kamis", "Friday": "Jumat", "Saturday": "Sabtu" };
+      let maxDay = '-';
+      const activeDays = data.most_active_day || {};
+      let maxCount = 0;
+      Object.entries(activeDays).forEach(([k, v]) => { if (v > maxCount) { maxCount = v; maxDay = dayTranslation[k] || k; } });
+
+      container.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-5 mb-6">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><p class="text-xs font-semibold text-slate-500 uppercase">Total Posts</p><h3 class="text-2xl font-bold text-slate-900 mt-1">${data.total_posts}</h3></div>
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><p class="text-xs font-semibold text-slate-500 uppercase">Avg Likes</p><h3 class="text-2xl font-bold text-slate-900 mt-1">${Math.round(data.likes_distribution.avg).toLocaleString('id-ID')}</h3><span class="text-xs text-slate-500">Min: ${data.likes_distribution.min.toLocaleString('id-ID')} | Max: ${data.likes_distribution.max.toLocaleString('id-ID')}</span></div>
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><p class="text-xs font-semibold text-slate-500 uppercase">Active Day</p><h3 class="text-2xl font-bold text-slate-900 mt-1">${maxDay}</h3></div>
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><p class="text-xs font-semibold text-slate-500 uppercase">Events Tracked</p><h3 class="text-2xl font-bold text-slate-900 mt-1">${Object.keys(data.event_trends || {}).length}</h3></div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <div class="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 class="font-bold text-slate-800 text-sm mb-4">Top Accounts</h3><div class="h-72"><canvas id="igBarChart"></canvas></div></div>
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 class="font-bold text-slate-800 text-sm mb-4">Active Days</h3><div class="h-72 flex items-center justify-center"><canvas id="igDoughnutChart"></canvas></div></div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 class="font-bold text-slate-800 text-sm mb-4">Event Trends</h3><div id="ig-event-trends-list" class="space-y-3"></div></div>
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 class="font-bold text-slate-800 text-sm mb-4">Word Cloud</h3><div id="ig-wordcloud" class="flex flex-wrap gap-2 p-4 bg-slate-50 rounded-xl justify-center min-h-[200px]"></div></div>
+        </div>`;
+
+      // Render event trends
+      const trendsContainer = document.getElementById('ig-event-trends-list');
+      const trends = Object.entries(data.event_trends || {});
+      if (trends.length) {
+        const maxTrend = Math.max(...trends.map(([,v]) => v));
+        trendsContainer.innerHTML = trends.map(([k, v]) => {
+          const pct = (v / maxTrend * 100).toFixed(0);
+          const colors = ['bg-pink-500', 'bg-purple-500', 'bg-blue-500', 'bg-amber-500', 'bg-green-500', 'bg-red-500', 'bg-teal-500'];
+          const c = colors[Object.keys(data.event_trends).indexOf(k) % colors.length];
+          return `<div><div class="flex justify-between text-xs mb-1"><span class="font-semibold text-slate-700">${k}</span><span class="text-slate-550 dark:text-slate-405">${v}</span></div><div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2"><div class="${c} h-2 rounded-full transition-all" style="width:${pct}%"></div></div></div>`;
+        }).join('');
+      } else { trendsContainer.innerHTML = '<p class="text-sm text-slate-400">No event trends data</p>'; }
+
+      // Word cloud
+      const wcContainer = document.getElementById('ig-wordcloud');
+      const words = data.word_cloud || [];
+      if (words.length) {
+        const maxCount = Math.max(...words.map(w => w.count));
+        wcContainer.innerHTML = words.map(w => {
+          const size = 0.7 + (w.count / maxCount) * 1.3;
+          const opacity = 0.5 + (w.count / maxCount) * 0.5;
+          return `<span style="font-size:${size}rem;opacity:${opacity}" class="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400 font-medium">${esc(w.word)}</span>`;
+        }).join('');
+      } else { wcContainer.innerHTML = '<p class="text-sm text-slate-400">No word cloud data</p>'; }
+
+      // Bar chart
+      const topAccounts = Object.entries(data.top_accounts || {}).sort((a, b) => b[1] - a[1]);
+      if (topAccounts.length) {
+        if (barChartInstance) barChartInstance.destroy();
+        const ctx = document.getElementById('igBarChart').getContext('2d');
+        barChartInstance = new Chart(ctx, {
+          type: 'bar',
+          data: { labels: topAccounts.map(e => e[0]), datasets: [{ label: 'Posts', data: topAccounts.map(e => e[1]), backgroundColor: ['#ec4899','#a855f7','#3b82f6','#f59e0b','#10b981','#ef4444'], borderRadius: 6 }] },
+          options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { legend: { display: false } }, 
+            scales: { 
+              y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, stepSize: 1 } }, 
+              x: { grid: { display: false }, ticks: { color: textColor } } 
+            } 
+          }
+        });
+      }
+      // Doughnut chart
+      const days = Object.entries(activeDays);
+      if (days.length) {
+        if (doughnutChartInstance) doughnutChartInstance.destroy();
+        const ctx2 = document.getElementById('igDoughnutChart').getContext('2d');
+        doughnutChartInstance = new Chart(ctx2, {
+          type: 'doughnut',
+          data: { labels: days.map(([k]) => dayTranslation[k] || k), datasets: [{ data: days.map(([,v]) => v), backgroundColor: ['#ec4899','#a855f7','#3b82f6','#f59e0b','#10b981','#ef4441','#14b8a6'] }] },
+          options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { 
+              legend: { 
+                position: 'bottom', 
+                labels: { boxWidth: 12, padding: 12, font: { size: 11 }, color: textColor } 
+              } 
+            } 
+          }
+        });
+      }
+      lucide.createIcons();
+    }
+
+    function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    // ─── THEME MANAGER ───
+    function applyTheme(theme) {
+        const root = document.documentElement;
+        let actualTheme = theme;
+        
+        if (theme === 'system') {
+            const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            actualTheme = systemPrefersDark ? 'dark' : 'light';
+        }
+        
+        if (actualTheme === 'dark') {
+            root.classList.add('dark');
+        } else {
+            root.classList.remove('dark');
+        }
+        
+        // Save preference
+        localStorage.setItem('theme-preference', theme);
+        
+        // Update Toggle Button UI
+        updateThemeButton(theme);
+        
+        // Re-render overview charts if present
+        const activeTab = document.querySelector('.sidebar-link.active-tab').dataset.tab;
+        if (activeTab === 'overview') {
+            loadOverviewStats();
+        } else if (activeTab === 'instagram' && typeof instagramInsightsData !== 'undefined' && instagramInsightsData) {
+            renderInstagramContent(instagramInsightsData);
+        }
+    }
+    
+    function updateThemeButton(theme) {
+        const btn = document.getElementById('theme-toggle-btn');
+        if (!btn) return;
+        
+        let iconHtml = '';
+        let text = '';
+        
+        if (theme === 'system') {
+            iconHtml = '<i data-lucide="monitor" class="w-4 h-4"></i>';
+            text = 'Tema: Sistem';
+        } else if (theme === 'dark') {
+            iconHtml = '<i data-lucide="moon" class="w-4 h-4"></i>';
+            text = 'Tema: Gelap';
+        } else {
+            iconHtml = '<i data-lucide="sun" class="w-4 h-4"></i>';
+            text = 'Tema: Terang';
+        }
+        
+        btn.innerHTML = `${iconHtml}<span>${text}</span>`;
+        lucide.createIcons();
+    }
+    
+    function cycleTheme() {
+        const current = localStorage.getItem('theme-preference') || 'system';
+        let next = 'system';
+        if (current === 'system') next = 'dark';
+        else if (current === 'dark') next = 'light';
+        else next = 'system';
+        
+        applyTheme(next);
+    }
+    
+    // Listen to system preference changes dynamically
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        const current = localStorage.getItem('theme-preference') || 'system';
+        if (current === 'system') {
+            applyTheme('system');
+        }
+    });
+    
+    // Trigger initial theme button sync on load
+    window.addEventListener('DOMContentLoaded', () => {
+        const savedTheme = localStorage.getItem('theme-preference') || 'system';
+        updateThemeButton(savedTheme);
+    });
+
+    // ─── Init ───
+    loadOverviewStats();
+  </script>
+</body>
+</html>

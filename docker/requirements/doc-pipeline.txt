@@ -1,0 +1,8 @@
+-r core.txt
+torch==2.12.0
+transformers==5.8.1
+sentencepiece==0.2.1
+nltk==3.9.4
+google-generativeai
+Pillow
+qrcode==8.2

@@ -24,10 +24,13 @@ def get_current_user_from_cookie():
 def login_page():
     user = get_current_user_from_cookie()
     if user:
-        if user.get('role') == 'owner':
+        role = user.get('role')
+        if role == 'owner' or (role == 'admin' and user.get('org_id')):
             return redirect(url_for('dashboard_web.owner_dashboard'))
-        elif user.get('role') == 'developer':
+        elif role == 'developer':
             return redirect(url_for('dashboard_web.dev_console'))
+        elif role == 'admin':
+            return redirect(url_for('dashboard_web.developers_dashboard'))
     return render_template('login.html')
 
 @dashboard_bp.route('/dashboard', methods=['GET'])
@@ -35,9 +38,19 @@ def owner_dashboard():
     user = get_current_user_from_cookie()
     if not user:
         return redirect(url_for('dashboard_web.login_page'))
-    if user.get('role') != 'owner':
+    role = user.get('role')
+    if role != 'owner' and role != 'admin':
         return "Access forbidden: Owner role required", 403
     return render_template('owner_dashboard.html', user=user)
+
+@dashboard_bp.route('/developers', methods=['GET'])
+def developers_dashboard():
+    user = get_current_user_from_cookie()
+    if not user:
+        return redirect(url_for('dashboard_web.login_page'))
+    if user.get('role') != 'admin':
+        return "Access forbidden: Admin role required", 403
+    return render_template('developers_dashboard.html', user=user)
 
 @dashboard_bp.route('/console', methods=['GET'])
 def dev_console():
@@ -51,7 +64,6 @@ def dev_console():
 @dashboard_bp.route('/logout', methods=['GET'])
 def logout():
     response = redirect(url_for('dashboard_web.login_page'))
-    # Clear the token cookie
     response.set_cookie('token', '', expires=0, path='/')
     return response
 

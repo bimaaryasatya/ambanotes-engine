@@ -29,7 +29,7 @@ def _call_mistral(prompt, system_instruction=None, history=None):
         "https://api.mistral.ai/v1/chat/completions",
         headers={"Authorization": f"Bearer {Config.MISTRAL_API_KEY}"},
         json={
-            "model": "mistral-small",
+            "model": "mistral-large-latest",
             "messages": messages
         },
         timeout=30
@@ -125,7 +125,7 @@ def summarize(current_user):
         if not text:
             return jsonify({"error": "No text provided"}), 400
 
-        prompt = f"Tolong buatkan ringkasan singkat dan padat dari teks dokumen berikut ini:\n\n{text}"
+        prompt = f"Tolong buatkan ringkasan singkat dan padat tentang isi dokumen berikut ini langsung to the point tanpa menggunakan emoji dan markdown serta JANGAN menambahkan kalimat pengantar seperti 'Tentu, ini ringkasan singkat dan padat tentang isi dokumen berikut ini':\n\n{text}"
         summary = _call_mistral(prompt)
 
         log_event("ai_service", "Summary generated successfully",

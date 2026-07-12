@@ -1,0 +1,6 @@
+﻿tunnel: ambanotes-tunnel
+credentials-file: /home/nonroot/.cloudflared/credentials.json
+ingress:
+  - hostname: notes.bimazznxt.my.id
+    service: http://api-gateway:5009
+  - service: http_status:404

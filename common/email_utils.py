@@ -34,19 +34,32 @@ def send_email(subject, recipient_email, body_html):
         log_event("email_utils", f"Failed to send email to {recipient_email}: {str(e)}", action="EMAIL_FAILED")
         return False, str(e)
 
-def send_otp_email(recipient_email, otp_code):
+def send_otp_email(recipient_email, otp_code, purpose="reset_password"):
     """
     Sends a stylized OTP email to the user.
+    purpose: "reset_password" | "verify_email" | "verify_login"
     """
-    subject = "AmbaNotes - Kode Verifikasi Reset Password"
-    
+    subject_map = {
+        "reset_password": "AmbaNotes - Kode Verifikasi Reset Password",
+        "verify_email": "AmbaNotes - Verifikasi Alamat Email",
+        "verify_login": "AmbaNotes - Verifikasi Login Perangkat Baru",
+    }
+    subject = subject_map.get(purpose, "AmbaNotes - Kode Verifikasi")
+
+    body_intro_map = {
+        "reset_password": "Kami menerima permintaan untuk mereset password akun AmbaNotes Anda. Gunakan kode OTP di bawah ini untuk melanjutkan:",
+        "verify_email": "Terima kasih telah mendaftar di AmbaNotes! Gunakan kode OTP di bawah ini untuk memverifikasi alamat email Anda:",
+        "verify_login": "Kami mendeteksi login dari perangkat baru. Gunakan kode OTP di bawah ini untuk memverifikasi akses Anda:",
+    }
+    body_intro = body_intro_map.get(purpose, "Gunakan kode OTP di bawah ini untuk melanjutkan:")
+
     body_html = f"""
     <html>
     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
         <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-            <h2 style="color: #2c3e50; text-align: center;">Reset Password AmbaNotes</h2>
+            <h2 style="color: #2c3e50; text-align: center;">{subject}</h2>
             <p>Halo,</p>
-            <p>Kami menerima permintaan untuk mereset password akun AmbaNotes Anda. Gunakan kode OTP di bawah ini untuk melanjutkan:</p>
+            <p>{body_intro}</p>
             <div style="text-align: center; margin: 30px 0;">
                 <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; background: #f4f4f4; padding: 10px 20px; border-radius: 5px; color: #3498db;">
                     {otp_code}

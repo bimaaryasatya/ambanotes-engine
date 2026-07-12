@@ -7,7 +7,7 @@ import re
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from .services.analytics_service import generate_insight
 from common.logger import log_event
 from common.jwt_utils import token_required
@@ -67,10 +67,13 @@ def insights(current_user):
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
 
+    date_from = request.args.get("date_from")
+    date_to = request.args.get("date_to")
+
     log_event("insight_service", f"Insights requested by: {current_user.get('username')}",
               user_id=user_id, org_id=org_id, action="INSIGHTS_REQUEST")
     try:
-        data = generate_insight()
+        data = generate_insight(date_from=date_from, date_to=date_to)
         return jsonify(data), 200
     except Exception as e:
         log_event("insight_service", f"Failed to generate insights: {str(e)}",

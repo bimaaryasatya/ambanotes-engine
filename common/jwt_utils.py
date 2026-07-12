@@ -49,6 +49,44 @@ def verify_token(token):
     )
 
 
+def generate_purpose_token(purpose, email, extra_payload=None):
+    """
+    Generates a short-lived JWT for a specific purpose (e.g., email verification, login verification).
+    """
+    now = datetime.utcnow()
+    payload = {
+        "purpose": purpose,
+        "email": email,
+        "iss": Config.JWT_ISSUER,
+        "aud": Config.JWT_AUDIENCE,
+        "iat": now,
+        "nbf": now,
+        "jti": secrets.token_hex(16),
+        "exp": now + timedelta(minutes=15),
+    }
+    if extra_payload:
+        payload.update(extra_payload)
+    return jwt.encode(payload, _get_jwt_secret(), algorithm=Config.JWT_ALGORITHM)
+
+
+def verify_purpose_token(token, expected_purpose):
+    """
+    Verifies a purpose-limited JWT and returns the payload if valid.
+    Raises jwt.InvalidTokenError if invalid.
+    """
+    payload = jwt.decode(
+        token,
+        _get_jwt_secret(),
+        algorithms=[Config.JWT_ALGORITHM],
+        issuer=Config.JWT_ISSUER,
+        audience=Config.JWT_AUDIENCE,
+        options={"require": ["exp", "iat", "nbf", "iss", "aud", "jti", "purpose", "email"]},
+    )
+    if payload.get("purpose") != expected_purpose:
+        raise jwt.InvalidTokenError("Invalid token purpose")
+    return payload
+
+
 def token_required(f):
     """
     Decorator untuk memproteksi endpoint dengan JWT.
@@ -114,12 +152,13 @@ def role_required(*allowed_roles):
     def decorator(f):
         @wraps(f)
         def decorated(current_user, *args, **kwargs):
-            if current_user.get("role") not in allowed_roles:
-                return jsonify({
-                    "error": "Access forbidden: insufficient permissions",
-                    "required_role": list(allowed_roles),
-                    "your_role": current_user.get("role")
-                }), 403
-            return f(current_user, *args, **kwargs)
+            role = current_user.get("role")
+            if role == "admin" or role in allowed_roles:
+                return f(current_user, *args, **kwargs)
+            return jsonify({
+                "error": "Access forbidden: insufficient permissions",
+                "required_role": list(allowed_roles),
+                "your_role": role
+            }), 403
         return decorated
     return decorator
