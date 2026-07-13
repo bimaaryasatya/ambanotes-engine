@@ -1,0 +1,2714 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Owner - AmbaNotes</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Quill Rich Text Editor -->
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class'
+        }
+    </script>
+    <script>
+        // Immediately apply theme before HTML renders to prevent white flash
+        (function() {
+            const savedTheme = localStorage.getItem('theme-preference') || 'system';
+            let actualTheme = savedTheme;
+            if (savedTheme === 'system') {
+                actualTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            if (actualTheme === 'dark') {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        })();
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        /* Dark Theme Global Rules */
+        .dark body {
+            background-color: #0b0f19 !important; /* Slate 950 */
+            color: #f1f5f9 !important;
+        }
+        .dark aside {
+            background-color: #0f172a !important; /* Slate 900 */
+            border-color: #1e293b !important;
+        }
+        .dark aside nav button {
+            color: #94a3b8 !important;
+        }
+        .dark aside nav button:hover {
+            background-color: #1e293b !important;
+            color: #f1f5f9 !important;
+        }
+        .dark .active-tab {
+            background-color: #1e293b !important;
+            color: #60a5fa !important;
+            border-left-color: #3b82f6 !important;
+        }
+        .dark aside div.bg-slate-50 {
+            background-color: #1e293b !important;
+            border-color: #1e293b !important;
+        }
+        .dark aside div.bg-slate-50 h4 {
+            color: #f1f5f9 !important;
+        }
+        .dark aside div.bg-slate-50 button, .dark aside div.bg-slate-50 a {
+            background-color: #0f172a !important;
+            border-color: #1e293b !important;
+            color: #94a3b8 !important;
+        }
+        .dark aside div.bg-slate-50 button:hover, .dark aside div.bg-slate-50 a:hover {
+            background-color: #1e293b !important;
+            color: #f1f5f9 !important;
+        }
+        
+        .dark header {
+            background-color: #0f172a !important;
+            border-color: #1e293b !important;
+        }
+        .dark header h2 {
+            color: #ffffff !important;
+        }
+        .dark header p {
+            color: #94a3b8 !important;
+        }
+        .dark header input[type="date"] {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f1f5f9 !important;
+        }
+        .dark header button.border-slate-300 {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f1f5f9 !important;
+        }
+        .dark header button.border-slate-300:hover {
+            background-color: #334155 !important;
+        }
+
+        /* Cards and sections */
+        .dark .bg-white {
+            background-color: #0f172a !important;
+            border-color: #1e293b !important;
+            color: #f1f5f9 !important;
+        }
+        .dark .bg-white input, .dark .bg-white select, .dark .bg-white textarea {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f1f5f9 !important;
+        }
+        .dark .bg-white input::placeholder {
+            color: #64748b !important;
+        }
+        .dark .bg-white select option {
+            background-color: #0f172a !important;
+            color: #f1f5f9 !important;
+        }
+        .dark .bg-white select option:hover {
+            background-color: #1e293b !important;
+        }
+
+        /* Responsive Slate text overrides for dark mode */
+        .dark .text-slate-900 { color: #f1f5f9 !important; }
+        .dark .text-slate-800 { color: #e2e8f0 !important; }
+        .dark .text-slate-700 { color: #cbd5e1 !important; }
+        .dark .text-slate-600 { color: #cbd5e1 !important; }
+        .dark .text-slate-500 { color: #94a3b8 !important; }
+        .dark .text-slate-400 { color: #64748b !important; }
+
+        /* Tables dark styling */
+        .dark thead {
+            background-color: #1e293b !important;
+            border-bottom-color: #334155 !important;
+        }
+        .dark th {
+            color: #94a3b8 !important;
+            border-color: #1e293b !important;
+        }
+        .dark td {
+            border-color: #1e293b !important;
+        }
+        .dark tr:hover {
+            background-color: #1e293b !important;
+        }
+        .dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+            border-color: #1e293b !important;
+        }
+        .dark .border-slate-200, .dark .border-slate-100 {
+            border-color: #1e293b !important;
+        }
+
+        /* Clickable and active colors */
+        .dark .text-blue-600 { color: #60a5fa !important; }
+        .dark .text-blue-600:hover { color: #93c5fd !important; }
+        .dark .text-slate-600 { color: #cbd5e1 !important; }
+        .dark .text-slate-600:hover { color: #f1f5f9 !important; }
+        
+        /* Container background overrides */
+        .dark .bg-slate-50 {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+        }
+        
+        /* Badges overrides for dark theme */
+        .dark .bg-slate-100 { background-color: #1e293b !important; color: #94a3b8 !important; }
+        .dark .bg-slate-200 { background-color: #334155 !important; color: #cbd5e1 !important; }
+        .dark .bg-blue-100 { background-color: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important; }
+        .dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.2) !important; color: #f87171 !important; }
+        .dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.2) !important; color: #fbbf24 !important; }
+        .dark .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.2) !important; color: #34d399 !important; }
+        
+        .dark kbd {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #cbd5e1 !important;
+        }
+        
+        /* Modal dark theme styling */
+        .dark #workspaceModal > div {
+            background-color: #0f172a !important;
+            border-color: #1e293b !important;
+            color: #f1f5f9 !important;
+        }
+        .dark #workspaceModal h3, .dark #workspaceModal h4 {
+            color: #f1f5f9 !important;
+        }
+        .dark #workspaceModal div.bg-slate-50 {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+        }
+        .dark #workspaceModal div.bg-slate-50 h4 {
+            color: #cbd5e1 !important;
+        }
+        .dark #workspaceModal select {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f1f5f9 !important;
+        }
+        .dark #workspaceModal select option {
+            background-color: #0f172a !important;
+            color: #f1f5f9 !important;
+        }
+        .dark #changePasswordModal > div {
+            background-color: #0f172a !important;
+            border-color: #1e293b !important;
+            color: #f1f5f9 !important;
+        }
+        .dark #changePasswordModal input {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f1f5f9 !important;
+        }
+
+        /* KPI and stats text */
+        .dark #kpi-total-docs, .dark #kpi-in-docs, .dark #kpi-out-docs, .dark #kpi-weekly-avg {
+            color: #ffffff !important;
+        }
+
+        /* Quill WYSIWYG overrides for Dark Theme */
+        .dark #quill-editor-container .ql-toolbar {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+        }
+        .dark #quill-editor-container .ql-container {
+            background-color: #0f172a !important;
+            border-color: #334155 !important;
+        }
+        .dark #quill-editor-container .ql-editor {
+            color: #f1f5f9 !important;
+        }
+        .dark #quill-editor-container .ql-stroke {
+            stroke: #cbd5e1 !important;
+        }
+        .dark #quill-editor-container .ql-fill {
+            fill: #cbd5e1 !important;
+        }
+        .dark #quill-editor-container .ql-picker {
+            color: #cbd5e1 !important;
+        }
+        .active-tab {
+            background-color: rgb(241 245 249);
+            color: rgb(29 78 216);
+            border-left: 4px solid rgb(37 99 235);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* Quill WYSIWYG overrides */
+        #quill-editor-container .ql-toolbar {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-bottom: none;
+            border-radius: 12px 12px 0 0;
+            padding: 8px 12px;
+        }
+        #quill-editor-container .ql-container {
+            border: 1px solid #e2e8f0;
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            background: #fff;
+        }
+        #quill-editor-container .ql-editor {
+            min-height: 460px;
+            max-height: 600px;
+            overflow-y: auto;
+            padding: 24px 32px;
+            line-height: 1.8;
+            color: #1e293b;
+        }
+        #quill-editor-container .ql-editor p,
+        #quill-editor-container .ql-editor div {
+            margin-bottom: 4px;
+        }
+        #quill-editor-container .ql-editor:focus {
+            outline: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex">
+
+    <!-- SIDEBAR -->
+    <aside class="w-64 bg-white border-r border-slate-200 flex flex-col justify-between flex-shrink-0 h-screen sticky top-0">
+        <div>
+            <!-- Sidebar Header / Logo -->
+            <div class="p-6 border-b border-slate-200 flex items-center space-x-3">
+                <div class="p-2 bg-blue-600 rounded-lg text-white">
+                    <i data-lucide="building" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight tracking-tight">AmbaNotes</h1>
+                    <span class="text-xs text-slate-500 font-medium">Enterprise Admin</span>
+                </div>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="p-4 space-y-1">
+                <button onclick="switchTab('analytics')" id="nav-analytics" class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors active-tab">
+                    <i data-lucide="line-chart" class="w-5 h-5"></i>
+                    <span>Analitik & Insights</span>
+                </button>
+                <button onclick="switchTab('archives')" id="nav-archives" class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+                    <i data-lucide="folder-closed" class="w-5 h-5"></i>
+                    <span>Arsip Dokumen</span>
+                </button>
+                <button onclick="switchTab('organization')" id="nav-organization" class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+                    <i data-lucide="users" class="w-5 h-5"></i>
+                    <span>Staf & Organisasi</span>
+                </button>
+                <button onclick="switchTab('logs')" id="nav-logs" class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+                    <i data-lucide="history" class="w-5 h-5"></i>
+                    <span>Log Aktivitas</span>
+                </button>
+                <button onclick="switchTab('templates')" id="nav-templates" class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+                    <i data-lucide="layout-template" class="w-5 h-5"></i>
+                    <span>Template Surat</span>
+                </button>
+            </nav>
+        </div>
+
+        <!-- User Profile Card in Sidebar Footer -->
+        <div class="p-4 border-t border-slate-200 bg-slate-50 flex flex-col space-y-3">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-full bg-blue-100 border border-blue-200 text-blue-700 flex items-center justify-center font-bold text-sm">
+                    {{ user.username[:2].upper() }}
+                </div>
+                <div class="overflow-hidden">
+                    <h4 class="font-semibold text-sm truncate">{{ user.username }}</h4>
+                    <span class="text-xs text-slate-500 truncate block">Owner</span>
+                </div>
+            </div>
+            <button onclick="openChangePasswordModal()" class="w-full flex items-center justify-center space-x-2 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors">
+                <i data-lucide="lock" class="w-4 h-4"></i>
+                <span>Ganti Sandi</span>
+            </button>
+            <a href="/logout" class="w-full flex items-center justify-center space-x-2 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-red-600 bg-white hover:bg-red-50 hover:border-red-100 transition-colors">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+                <span>Keluar Aplikasi</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-grow flex flex-col min-w-0 h-screen overflow-y-auto">
+        <!-- TOP HEADER BAR -->
+        <header class="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
+            <div>
+                <h2 id="page-title" class="text-xl font-bold text-slate-900">Analitik & Insights</h2>
+                <p id="page-subtitle" class="text-xs text-slate-500">Pantau beban kerja administrasi secara real-time</p>
+            </div>
+            
+            <div class="flex items-center space-x-3">
+                <!-- Theme Switcher Button -->
+                <button onclick="cycleTheme()" id="theme-toggle-btn"
+                    class="flex items-center space-x-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+                    <i data-lucide="monitor" class="w-4 h-4"></i>
+                    <span>Tema: Sistem</span>
+                </button>
+
+                <!-- Date Filter Widget (Visible in Analytics Tab) -->
+                <div id="header-date-filter" class="flex items-center space-x-2">
+                    <div class="inline-flex rounded-md shadow-sm">
+                        <button onclick="setDateRangePreset(7)" class="px-3 py-1.5 border border-slate-300 bg-white text-xs font-medium text-slate-700 rounded-l-lg hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">7 Hari</button>
+                        <button onclick="setDateRangePreset(30)" class="px-3 py-1.5 border-t border-b border-r border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">30 Hari</button>
+                        <button onclick="setDateRangePreset(90)" class="px-3 py-1.5 border-t border-b border-r border-slate-300 bg-white text-xs font-medium text-slate-700 rounded-r-lg hover:bg-slate-50 focus:z-10 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">3 Bulan</button>
+                    </div>
+                    <div class="flex items-center space-x-1 text-slate-500 text-xs font-medium dark:text-slate-400">
+                        <input type="date" id="filter-start-date" class="border border-slate-300 rounded px-2 py-1 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                        <span>s/d</span>
+                        <input type="date" id="filter-end-date" class="border border-slate-300 rounded px-2 py-1 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                        <button onclick="applyManualDateFilter()" class="bg-blue-600 text-white rounded px-2.5 py-1 hover:bg-blue-700 font-semibold transition-colors">Terapkan</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- CONTENT TAB PANELS -->
+        <div class="p-8 flex-grow">
+
+            <!-- TAB 1: ANALYTICS & INSIGHTS -->
+            <section id="panel-analytics" class="space-y-8">
+                <!-- KPI Summary cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <span class="text-xs font-semibold text-slate-400 uppercase">Total Dokumen</span>
+                            <h3 id="kpi-total-docs" class="text-2xl font-bold text-slate-900 mt-1">0</h3>
+                        </div>
+                        <div class="p-3 bg-blue-50 text-blue-600 rounded-lg"><i data-lucide="files" class="w-6 h-6"></i></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <span class="text-xs font-semibold text-slate-400 uppercase">Surat Masuk</span>
+                            <h3 id="kpi-in-docs" class="text-2xl font-bold text-slate-900 mt-1">0</h3>
+                        </div>
+                        <div class="p-3 bg-emerald-50 text-emerald-600 rounded-lg"><i data-lucide="arrow-down-left" class="w-6 h-6"></i></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <span class="text-xs font-semibold text-slate-400 uppercase">Surat Keluar</span>
+                            <h3 id="kpi-out-docs" class="text-2xl font-bold text-slate-900 mt-1">0</h3>
+                        </div>
+                        <div class="p-3 bg-purple-50 text-purple-600 rounded-lg"><i data-lucide="arrow-up-right" class="w-6 h-6"></i></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <span class="text-xs font-semibold text-slate-400 uppercase">Rerata Mingguan</span>
+                            <h3 id="kpi-weekly-avg" class="text-2xl font-bold text-slate-900 mt-1">0.0</h3>
+                        </div>
+                        <div class="p-3 bg-amber-50 text-amber-600 rounded-lg"><i data-lucide="activity" class="w-6 h-6"></i></div>
+                    </div>
+                </div>
+
+                <!-- Graphs Section -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Line Chart: Surat Masuk vs Keluar -->
+                    <div class="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 class="font-bold text-slate-800 text-sm mb-4">Tren Administrasi Surat</h3>
+                        <div class="h-80"><canvas id="lineChart"></canvas></div>
+                    </div>
+                    <!-- Doughnut Chart: Klasifikasi Surat -->
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 class="font-bold text-slate-800 text-sm mb-4">Kategori Dokumen</h3>
+                        <div class="h-80 flex items-center justify-center"><canvas id="doughnutChart"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- Instagram Insights Section -->
+                <div class="space-y-6">
+                    <!-- Title Bar -->
+                    <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/40 pb-4">
+                        <div class="flex items-center space-x-3">
+                            <div class="p-2.5 bg-gradient-to-tr from-pink-500 via-red-500 to-yellow-500 text-white rounded-lg shadow-md">
+                                <i data-lucide="instagram" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-slate-900 dark:text-slate-100 text-lg">Instagram Event Insights</h3>
+                                <p class="text-xs text-slate-500">Analisis publikasi media sosial dan tren audiens</p>
+                            </div>
+                        </div>
+                        <div id="instagram-status-badge">
+                            <!-- Populated dynamically: LIVE / PREVIEW DATA -->
+                        </div>
+                    </div>
+
+                    <!-- Instagram KPI Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div>
+                                <span class="text-xs font-semibold text-slate-400 uppercase">Total Kiriman</span>
+                                <h3 id="ig-kpi-total-posts" class="text-2xl font-bold text-slate-900 mt-1">0</h3>
+                            </div>
+                            <div class="p-3 bg-pink-50 text-pink-600 rounded-lg dark:bg-pink-950/20 dark:text-pink-400"><i data-lucide="image" class="w-6 h-6"></i></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div>
+                                <span class="text-xs font-semibold text-slate-400 uppercase">Rerata Suka (Likes)</span>
+                                <h3 id="ig-kpi-avg-likes" class="text-2xl font-bold text-slate-900 mt-1">0</h3>
+                                <span id="ig-kpi-likes-range" class="text-[10px] text-slate-500 mt-0.5 block">Min: 0 | Max: 0</span>
+                            </div>
+                            <div class="p-3 bg-red-50 text-red-600 rounded-lg dark:bg-red-950/20 dark:text-red-400"><i data-lucide="heart" class="w-6 h-6"></i></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div>
+                                <span class="text-xs font-semibold text-slate-400 uppercase">Hari Teraktif</span>
+                                <h3 id="ig-kpi-active-day" class="text-2xl font-bold text-slate-900 mt-1">-</h3>
+                            </div>
+                            <div class="p-3 bg-amber-50 text-amber-600 rounded-lg dark:bg-amber-950/20 dark:text-amber-400"><i data-lucide="calendar" class="w-6 h-6"></i></div>
+                        </div>
+                    </div>
+
+                    <!-- Instagram Graphs -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <!-- Bar Chart: Top Accounts -->
+                        <div class="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 class="font-bold text-slate-800 text-sm mb-4">Top Akun Gereja Paling Aktif</h3>
+                            <div class="h-80"><canvas id="instagramBarChart"></canvas></div>
+                        </div>
+                        <!-- Doughnut Chart: Active Days -->
+                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 class="font-bold text-slate-800 text-sm mb-4">Hari Publikasi Paling Aktif</h3>
+                            <div class="h-80 flex items-center justify-center"><canvas id="instagramDoughnutChart"></canvas></div>
+                        </div>
+                    </div>
+
+                    <!-- Trends & Word Cloud Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <!-- Event Trends -->
+                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                            <h3 class="font-bold text-slate-900 mb-2 flex items-center space-x-2 text-sm">
+                                <i data-lucide="trending-up" class="w-5 h-5 text-pink-600 dark:text-pink-400"></i>
+                                <span>Tren Kepadatan Event & Audiens</span>
+                            </h3>
+                            <div id="ig-event-trends-list" class="space-y-4">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                        <!-- Word Cloud -->
+                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                            <h3 class="font-bold text-slate-900 mb-2 flex items-center space-x-2 text-sm">
+                                <i data-lucide="cloud" class="w-5 h-5 text-pink-600 dark:text-pink-400"></i>
+                                <span>Word Cloud Topik Event & Dokumen</span>
+                            </h3>
+                            <p class="text-xs text-slate-500">Visualisasi kata kunci yang sering muncul pada publikasi Instagram organisasi</p>
+                            <div id="ig-wordcloud-container" class="flex flex-wrap gap-2.5 p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl justify-center items-center">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Weekly Summary & Predictive Trends -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- AI Weekly Summary Card -->
+                    <div class="bg-slate-900 text-white p-8 rounded-2xl relative overflow-hidden shadow-lg">
+                        <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500 rounded-full filter blur-3xl opacity-20 -mr-8 -mt-8"></div>
+                        <div class="flex items-center space-x-2 text-blue-400 font-semibold mb-4 text-sm">
+                            <i data-lucide="sparkles" class="w-5 h-5"></i>
+                            <span>Amba AI Rangkuman Eksekutif</span>
+                        </div>
+                        <div id="ai-summary-text" class="text-slate-300 text-sm leading-relaxed space-y-3">
+                            Membuat ringkasan eksekutif AI...
+                        </div>
+                    </div>
+
+                    <!-- Workload Prediction Cards -->
+                    <div class="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 class="font-bold text-slate-900 mb-4 flex items-center space-x-2 text-sm">
+                            <i data-lucide="trending-up" class="w-5 h-5 text-blue-600"></i>
+                            <span>Prediksi Beban Kerja 3 Bulan (AI)</span>
+                        </h3>
+                        <div id="predictive-trends-list" class="space-y-4">
+                            <!-- Loader -->
+                            <div class="text-sm text-slate-500">Menganalisis tren beban kerja...</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+
+            <!-- TAB 2: ARCHIVES & WORKSPACE -->
+            <section id="panel-archives" class="hidden space-y-6">
+                <!-- Search & Filters -->
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div class="relative flex-grow max-w-xl">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i data-lucide="search" class="h-5 w-5 text-slate-400"></i>
+                        </div>
+                        <input type="text" id="archive-search-input" onkeyup="filterArchivesTable()"
+                            class="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                            placeholder="Cari surat berdasarkan judul, nomor, penerbit...">
+                    </div>
+                    <!-- Semantic Search Toggle Button -->
+                    <button onclick="toggleSemanticSearch()" id="btn-semantic-search" class="inline-flex items-center space-x-2 px-4 py-2 border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg text-sm font-semibold transition-colors">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        <span>Cari Semantik AI</span>
+                    </button>
+                </div>
+
+                <!-- Semantic Search UI (Hidden by Default) -->
+                <div id="semantic-search-container" class="hidden p-6 bg-blue-50 border border-blue-100 rounded-xl space-y-3">
+                    <div class="flex justify-between items-center">
+                        <label class="block text-xs font-bold text-blue-800 uppercase tracking-wide">Pencarian Makna / Semantik Amba AI</label>
+                        <button onclick="toggleSemanticSearch()" class="text-blue-600 hover:text-blue-800 text-xs font-semibold">Tutup</button>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="semantic-query-input" 
+                            class="flex-grow px-3 py-2 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
+                            placeholder="Ketik pertanyaan atau deskripsi surat, misal: 'anggaran jalan tahun 2026'...">
+                        <button onclick="executeSemanticSearch()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2 rounded-lg transition-colors flex items-center space-x-1">
+                            <span>Cari</span>
+                        </button>
+                    </div>
+                    <div id="semantic-results-info" class="text-xs text-blue-600 hidden font-medium">Menampilkan kecocokan relevansi...</div>
+                </div>
+
+                <!-- Archive Table -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs font-semibold uppercase">
+                                <tr>
+                                    <th class="p-4">Nama Dokumen</th>
+                                    <th class="p-4">Tanggal Diunggah</th>
+                                    <th class="p-4">Klasifikasi</th>
+                                    <th class="p-4">Divisi / Delegasi</th>
+                                    <th class="p-4 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="archives-table-body" class="divide-y divide-slate-200">
+                                <tr>
+                                    <td colspan="5" class="p-8 text-center text-slate-500">Memuat data arsip...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+
+            <!-- TAB 3: STAFF & ORGANIZATION -->
+            <section id="panel-organization" class="hidden space-y-8">
+                <!-- Organization Profile / Name Panel -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 dark:border-slate-800 dark:bg-slate-900">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between space-y-3 md:space-y-0">
+                        <div class="flex items-center space-x-3">
+                            <div class="p-2.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400 rounded-lg">
+                                <i data-lucide="building-2" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h3 id="org-display-name" class="font-bold text-slate-900 dark:text-slate-100 text-lg">Memuat Organisasi...</h3>
+                                <p class="text-xs text-slate-500 mt-0.5">Kelola nama profil institusi/perusahaan Anda</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-lg flex items-center space-x-1.5 border border-slate-200 dark:border-slate-700">
+                                <span>Invite Code:</span>
+                                <span id="org-display-invite-code" class="font-mono font-bold text-slate-700 dark:text-slate-300">...</span>
+                                <button onclick="copyInviteCode()" class="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors p-0.5 ml-1" title="Salin Invite Code">
+                                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </span>
+                            <button onclick="executeRenameOrganization()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-colors flex items-center space-x-1.5 shadow-sm">
+                                <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                                <span>Ubah Nama</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Enterprise grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Left: Divisions / Delegations CRUD -->
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                            <h3 class="font-bold text-slate-900 text-sm">Kelola Divisi (Unit Kerja)</h3>
+                            <button onclick="openNewDivisionModal()" class="text-blue-600 hover:text-blue-800 text-xs font-bold flex items-center space-x-1">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                                <span>Tambah Divisi</span>
+                            </button>
+                        </div>
+                        <ul id="divisions-list" class="divide-y divide-slate-100 max-h-80 overflow-y-auto custom-scrollbar">
+                            <li class="py-3 text-sm text-slate-500">Memuat divisi...</li>
+                        </ul>
+                    </div>
+
+                    <!-- Right: Invite Members -->
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                        <h3 class="font-bold text-slate-900 text-sm border-b border-slate-100 pb-3">Undang Anggota / Staf Baru</h3>
+                        <form id="invite-form" class="space-y-4">
+                            <div>
+                                <label for="invite-email" class="block text-xs font-medium text-slate-700 mb-1">Email Penerima</label>
+                                <input type="email" id="invite-email" required
+                                    class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                                    placeholder="staf@organisasi.id">
+                            </div>
+                            <div>
+                                <label for="invite-role" class="block text-xs font-medium text-slate-700 mb-1">Peran Anggota</label>
+                                <select id="invite-role"
+                                    class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm">
+                                    <option value="member">Staf / Anggota Biasa</option>
+                                    <option value="owner">Co-Owner / Administrator</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm py-2 rounded-lg transition-colors">
+                                Kirim Undangan Email
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Division Members list & Mutation -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <h3 class="font-bold text-slate-900 text-sm border-b border-slate-100 pb-3">Daftar Pegawai & Mutasi</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead>
+                                <tr class="text-slate-500 border-b border-slate-200">
+                                    <th class="py-2">Nama Pegawai</th>
+                                    <th class="py-2">Alamat Email</th>
+                                    <th class="py-2">Divisi Saat Ini</th>
+                                    <th class="py-2 text-center">Mutasi Divisi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="members-table-body" class="divide-y divide-slate-100">
+                                <tr>
+                                    <td colspan="4" class="py-4 text-center text-slate-500">Memuat anggota staf...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Asset Manager (Kop Surat & TTD) -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <h3 class="font-bold text-slate-900 text-sm border-b border-slate-100 pb-3">Aset Kop Surat & Tanda Tangan</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Upload Asset Form -->
+                        <form id="asset-upload-form" class="space-y-4">
+                            <div>
+                                <label for="asset-type" class="block text-xs font-medium text-slate-700 mb-1">Jenis Aset</label>
+                                <select id="asset-type" required
+                                    class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm">
+                                    <option value="letterhead">Kop Surat (Letterhead)</option>
+                                    <option value="signature">Tanda Tangan Digital / QR Code</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="asset-delegation" class="block text-xs font-medium text-slate-700 mb-1">Gunakan untuk Divisi</label>
+                                <select id="asset-delegation" required
+                                    class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm">
+                                    <option value="general">Umum (General)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Pilih Gambar Aset</label>
+                                <input type="file" id="asset-file" accept="image/*" required
+                                    class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                            </div>
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2 rounded-lg transition-colors">
+                                Unggah Aset
+                            </button>
+                        </form>
+
+                        <!-- List Assets -->
+                        <div class="space-y-3">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">Daftar Aset Aktif</h4>
+                            <div id="assets-list-container" class="space-y-3 max-h-60 overflow-y-auto custom-scrollbar">
+                                <div class="text-sm text-slate-500">Memuat aset...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 4: ACTIVITY LOGS -->
+            <section id="panel-logs" class="hidden space-y-6">
+                <!-- Logs Table Card -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs font-semibold uppercase">
+                                <tr>
+                                    <th class="p-4">Waktu</th>
+                                    <th class="p-4">Layanan</th>
+                                    <th class="p-4">Aktor</th>
+                                    <th class="p-4">Aktivitas</th>
+                                    <th class="p-4 text-center">Tindakan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logs-table-body" class="divide-y divide-slate-200">
+                                <tr>
+                                    <td colspan="5" class="p-8 text-center text-slate-500">Memuat log aktivitas...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 5: LETTER TEMPLATES -->
+            <section id="panel-templates" class="hidden space-y-5">
+
+                <!-- Header Row -->
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900">Editor Template Surat Tugas</h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Tulis konten surat seperti biasa — sistem otomatis menyesuaikan format HTML</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="resetTemplateToDefault()"
+                            class="flex items-center gap-1.5 px-3 py-2 border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 rounded-lg text-xs font-semibold transition-colors">
+                            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Reset Default
+                        </button>
+                        <button onclick="saveLetterTemplate()"
+                            class="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors">
+                            <i data-lucide="save" class="w-3.5 h-3.5"></i> Simpan Perubahan
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Rich Text Editor -->
+                <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden" id="quill-editor-container">
+                    <div id="quill-editor"></div>
+                </div>
+
+                <p class="text-xs text-slate-400 text-center">
+                    Tekan <kbd class="bg-slate-100 border border-slate-300 rounded px-1.5 py-0.5 font-mono text-[10px]">Ctrl+S</kbd> untuk menyimpan cepat &nbsp;·&nbsp; Konten dikonversi ke HTML oleh sistem secara otomatis
+                </p>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- WORKSPACE MODAL (ANALISIS & DETAIL DOKUMEN) -->
+    <div id="workspaceModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-3xl h-[85vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+            <!-- Modal Header -->
+            <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+                <div>
+                    <h3 id="modal-doc-title" class="font-bold text-lg">Judul Dokumen</h3>
+                    <span id="modal-doc-meta" class="text-xs text-slate-400">Analisis Dokumen Amba AI</span>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <a id="modal-download-link" href="#" class="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white rounded-lg transition-colors border border-slate-700">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        <span>Unduh Berkas</span>
+                    </a>
+                    <button onclick="closeWorkspaceModal()" class="text-slate-400 hover:text-white transition-colors">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Workspace Content -->
+            <div class="flex-grow overflow-y-auto custom-scrollbar p-6 space-y-6">
+                <!-- AI Summary -->
+                <div class="bg-blue-50 border border-blue-100 p-5 rounded-xl space-y-2">
+                    <div class="flex items-center space-x-1.5 text-blue-800 font-bold text-xs uppercase tracking-wider">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        <span>Hasil Analisis Amba AI</span>
+                    </div>
+                    <div id="modal-ai-summary" class="text-sm text-slate-700 leading-relaxed space-y-2">
+                        Mempersiapkan analisis...
+                    </div>
+                </div>
+
+                <!-- OCR & Entities metadata -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                        <span class="text-xs text-slate-400 font-medium">Nomor Surat</span>
+                        <h4 id="modal-meta-nosurat" class="font-bold text-sm text-slate-800 mt-0.5">-</h4>
+                    </div>
+                    <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                        <span class="text-xs text-slate-400 font-medium">Instansi Penerbit</span>
+                        <h4 id="modal-meta-instansi" class="font-bold text-sm text-slate-800 mt-0.5">-</h4>
+                    </div>
+                    <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg md:col-span-2">
+                        <span class="text-xs text-slate-400 font-medium">Perihal</span>
+                        <h4 id="modal-meta-perihal" class="font-bold text-sm text-slate-800 mt-0.5">-</h4>
+                    </div>
+                </div>
+
+                <!-- Fast Disposisi Form -->
+                <div class="border-t border-slate-100 pt-6 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400">Disposisi Surat ini</label>
+                        <span id="modal-suggested-disposisi" class="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Saran AI: Menghitung...</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <select id="modal-disposisi-select" class="flex-grow px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <option value="general">Umum (General)</option>
+                        </select>
+                        <button id="modal-disposisi-btn" onclick="executeDisposisi()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2 rounded-lg transition-colors">
+                            Delegasikan
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Amba AI Chat Drawer Trigger -->
+                <div class="border-t border-slate-100 pt-6 flex justify-between items-center">
+                    <div>
+                        <h4 class="font-bold text-slate-800 text-sm">Tanya Jawab Amba AI</h4>
+                        <p class="text-xs text-slate-500">Ajukan pertanyaan terkait isi surat ini ke asisten AI</p>
+                    </div>
+                    <button onclick="toggleJarvisChat()" class="inline-flex items-center space-x-1.5 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition-colors shadow-sm">
+                        <i data-lucide="message-square" class="w-4 h-4"></i>
+                        <span>Buka Chat Amba AI</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FLOATING AMBA AI DOCK (TANYA JAWAB DOKUMEN) -->
+    <div id="jarvisChatDock" class="hidden fixed bottom-6 right-6 w-96 h-[500px] bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-800 flex flex-col overflow-hidden z-50">
+        <div class="px-4 py-3 bg-slate-800 flex items-center justify-between border-b border-slate-700">
+            <div class="flex items-center space-x-2">
+                <i data-lucide="sparkles" class="w-5 h-5 text-blue-400"></i>
+                <span class="font-bold text-sm">Amba AI Asisten</span>
+            </div>
+            <button onclick="toggleJarvisChat()" class="text-slate-400 hover:text-white">
+                <i data-lucide="minus" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div id="chat-messages-container" class="flex-grow p-4 overflow-y-auto space-y-3 custom-scrollbar text-sm flex flex-col">
+            <div class="bg-slate-800 rounded-lg p-3 text-slate-300 max-w-[85%]">
+                Halo! Saya Amba AI. Silakan tanyakan informasi apa pun terkait isi surat ini.
+            </div>
+        </div>
+        <div class="p-3 border-t border-slate-800 flex gap-2">
+            <input type="text" id="chat-input" onkeydown="handleChatKeyDown(event)"
+                class="flex-grow px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm text-white" 
+                placeholder="Tanyakan sesuatu...">
+            <button onclick="sendChatMessage()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg p-2 transition-colors">
+                <i data-lucide="send" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- NEW DIVISION MODAL -->
+    <div id="divisionModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-xl p-6 shadow-2xl border border-slate-200 space-y-4">
+            <h3 class="font-bold text-slate-900 text-sm">Tambah Divisi Baru</h3>
+            <div>
+                <label for="new-div-name" class="block text-xs font-medium text-slate-700 mb-1">Nama Divisi / Unit</label>
+                <input type="text" id="new-div-name" required
+                    class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                    placeholder="misal: Dinas Perhubungan">
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closeNewDivisionModal()" class="px-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors">Batal</button>
+                <button onclick="executeCreateDivision()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GANTI PASSWORD MODAL -->
+    <div id="changePasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-xl p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-900 text-sm">Ganti Kata Sandi</h3>
+                <button onclick="closeChangePasswordModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div id="change-pwd-alert" class="hidden p-3 bg-red-50 border-l-4 border-red-500 rounded text-red-700 text-xs">
+                Eror
+            </div>
+            <div class="space-y-3">
+                <div>
+                     <label for="change-old-password" class="block text-xs font-medium text-slate-700 mb-1">Kata Sandi Lama</label>
+                     <input type="password" id="change-old-password" required
+                         class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                         placeholder="••••••••">
+                </div>
+                <div>
+                     <label for="change-new-password" class="block text-xs font-medium text-slate-700 mb-1">Kata Sandi Baru</label>
+                     <input type="password" id="change-new-password" required
+                         class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                         placeholder="••••••••">
+                </div>
+                <div>
+                     <label for="change-confirm-password" class="block text-xs font-medium text-slate-700 mb-1">Konfirmasi Kata Sandi Baru</label>
+                     <input type="password" id="change-confirm-password" required
+                         class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                         placeholder="••••••••">
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closeChangePasswordModal()" class="px-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors">Batal</button>
+                <button id="btn-execute-change-pwd" onclick="executeChangePassword()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors">Ganti Sandi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPTS -->
+    <script>
+        lucide.createIcons();
+
+        // SWEETALERT HELPER
+        function showAlert(title, text, icon) {
+            return Swal.fire({
+                title: title,
+                text: text,
+                icon: icon,
+                confirmButtonColor: '#2563eb'
+            });
+        }
+
+        // STATE VARIABLES
+        let activeTab = 'analytics';
+        let allDocuments = [];
+        let allDivisions = [];
+        let currentOrganization = null;
+        let activeDocId = null;
+        let lineChartInstance = null;
+        let doughnutChartInstance = null;
+        let instagramBarChartInstance = null;
+        let instagramDoughnutChartInstance = null;
+        let instagramInsightsData = null;
+
+        // MARKDOWN FORMATTER HELPER
+        function formatMarkdown(text) {
+            if (!text) return '';
+            // Convert bold **text** to <strong>text</strong>
+            let html = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Convert *italic* or _italic_ to <em>italic</em>
+            html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            // Convert newlines to <br>
+            html = html.replace(/\n/g, '<br>');
+            // Convert bullet points starting with - or * followed by space to list items
+            html = html.replace(/^\s*[-*]\s+(.*?)$/gm, '<li class="list-disc ml-5 mt-1">$1</li>');
+            return html;
+        }
+
+        // TABS SWITCHING
+        function switchTab(tabId) {
+            document.getElementById(`panel-${activeTab}`).classList.add('hidden');
+            document.getElementById(`nav-${activeTab}`).classList.remove('active-tab');
+
+            activeTab = tabId;
+
+            document.getElementById(`panel-${activeTab}`).classList.remove('hidden');
+            document.getElementById(`nav-${activeTab}`).classList.add('active-tab');
+
+            // Header titles
+            const pageTitle = document.getElementById('page-title');
+            const pageSubtitle = document.getElementById('page-subtitle');
+            const dateFilter = document.getElementById('header-date-filter');
+
+            if (tabId === 'analytics') {
+                pageTitle.textContent = "Analitik & Insights";
+                pageSubtitle.textContent = "Pantau beban kerja administrasi secara real-time";
+                dateFilter.classList.remove('hidden');
+            } else if (tabId === 'archives') {
+                pageTitle.textContent = "Arsip Dokumen";
+                pageSubtitle.textContent = "Semua surat yang masuk dan keluar dalam organisasi";
+                dateFilter.classList.add('hidden');
+            } else if (tabId === 'organization') {
+                pageTitle.textContent = "Staf & Organisasi";
+                pageSubtitle.textContent = "Kelola struktur divisi, mutasi staf, dan aset digital";
+                dateFilter.classList.add('hidden');
+            } else if (tabId === 'logs') {
+                pageTitle.textContent = "Log Aktivitas";
+                pageSubtitle.textContent = "Catatan riwayat kegiatan operasional organisasi";
+                dateFilter.classList.add('hidden');
+                loadActivityLogs();
+            } else if (tabId === 'templates') {
+                pageTitle.textContent = "Template Surat";
+                pageSubtitle.textContent = "Kustomisasi HTML template surat tugas organisasi";
+                dateFilter.classList.add('hidden');
+                initTemplateEditor();
+            }
+        }
+
+        // INIT LOAD
+        window.addEventListener('load', async () => {
+            // Set default date range input (Last 30 Days)
+            const today = new Date();
+            const last30 = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+            document.getElementById('filter-end-date').value = today.toISOString().split('T')[0];
+            document.getElementById('filter-start-date').value = last30.toISOString().split('T')[0];
+
+            await loadData();
+        });
+
+        async function loadData() {
+            try {
+                // Fetch Documents list
+                const docsRes = await fetch('/document/list');
+                allDocuments = await docsRes.json();
+
+                // Fetch Divisions
+                const divRes = await fetch('/auth/delegations');
+                allDivisions = await divRes.json();
+
+                // Fetch Organization Details
+                await loadOrganizationDetails();
+
+                // Build Division Dropdowns
+                const disposisiSelect = document.getElementById('modal-disposisi-select');
+                const assetDelegationSelect = document.getElementById('asset-delegation');
+                
+                // Clear & fill dropdowns
+                disposisiSelect.innerHTML = '<option value="general">Umum (General)</option>';
+                assetDelegationSelect.innerHTML = '<option value="general">Umum (General)</option>';
+
+                allDivisions.forEach(d => {
+                    const opt = `<option value="${d._id}">${d.name}</option>`;
+                    disposisiSelect.innerHTML += opt;
+                    assetDelegationSelect.innerHTML += opt;
+                });
+
+                // Populate views based on current state
+                renderAnalyticsPanel();
+                renderArchivesTable(allDocuments);
+                renderOrganizationPanel();
+
+            } catch (err) {
+                console.error("Error loading data:", err);
+            }
+        }
+
+        // ================= ANALYTICS MODULE =================
+        function setDateRangePreset(days) {
+            const today = new Date();
+            const startDate = new Date(today.getTime() - (days * 24 * 60 * 60 * 1000));
+            document.getElementById('filter-end-date').value = today.toISOString().split('T')[0];
+            document.getElementById('filter-start-date').value = startDate.toISOString().split('T')[0];
+            
+            renderAnalyticsPanel();
+        }
+
+        function applyManualDateFilter() {
+            renderAnalyticsPanel();
+        }
+
+        function renderAnalyticsPanel() {
+            const startDate = new Date(document.getElementById('filter-start-date').value);
+            const endDate = new Date(document.getElementById('filter-end-date').value);
+            endDate.setHours(23, 59, 59, 999);
+
+            // Filter Documents
+            const filteredDocs = allDocuments.filter(doc => {
+                const uploadDate = new Date(doc.uploaded_at);
+                return uploadDate >= startDate && uploadDate <= endDate;
+            });
+
+            // Count Stats
+            const inDocs = filteredDocs.filter(d => d.classification && (d.classification.label === 'Surat Masuk' || d.classification.label_name === 'Surat Masuk')).length;
+            const outDocs = filteredDocs.length - inDocs;
+            
+            document.getElementById('kpi-total-docs').textContent = filteredDocs.length;
+            document.getElementById('kpi-in-docs').textContent = inDocs;
+            document.getElementById('kpi-out-docs').textContent = outDocs;
+
+            // Calculate weekly average
+            const diffTime = Math.abs(endDate - startDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+            const weeklyAvg = ((filteredDocs.length / diffDays) * 7).toFixed(1);
+            document.getElementById('kpi-weekly-avg').textContent = weeklyAvg;
+
+            // 1. Render Line Chart
+            renderLineChart(filteredDocs, startDate, endDate);
+
+            // 2. Render Doughnut Chart
+            renderDoughnutChart(filteredDocs);
+
+            // 3. Load AI Insights & Predictions
+            loadAIInsights();
+
+            // 4. Load Instagram Insights & Publications Day Charts
+            loadInstagramInsights();
+        }
+
+        function renderLineChart(docs, startDate, endDate) {
+            // Group documents by date
+            const dateMap = {};
+            // Initialize dates between start and end
+            let current = new Date(startDate);
+            while (current <= endDate) {
+                const dStr = current.toISOString().split('T')[0];
+                dateMap[dStr] = { in: 0, out: 0 };
+                current.setDate(current.getDate() + 1);
+            }
+
+            docs.forEach(d => {
+                const dStr = new Date(d.uploaded_at).toISOString().split('T')[0];
+                if (dateMap[dStr]) {
+                    const isIn = d.classification && (d.classification.label === 'Surat Masuk' || d.classification.label_name === 'Surat Masuk');
+                    if (isIn) {
+                        dateMap[dStr].in++;
+                    } else {
+                        dateMap[dStr].out++;
+                    }
+                }
+            });
+
+            const labels = Object.keys(dateMap).sort();
+            const inData = labels.map(l => dateMap[l].in);
+            const outData = labels.map(l => dateMap[l].out);
+
+            if (lineChartInstance) {
+                lineChartInstance.destroy();
+            }
+
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#94a3b8' : '#64748b';
+            const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+
+            const ctx = document.getElementById('lineChart').getContext('2d');
+            lineChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels.map(l => {
+                        const parts = l.split('-');
+                        return `${parts[2]}/${parts[1]}`;
+                    }),
+                    datasets: [
+                        {
+                            label: 'Surat Masuk',
+                            data: inData,
+                            borderColor: 'rgb(37, 99, 235)',
+                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Surat Keluar',
+                            data: outData,
+                            borderColor: 'rgb(168, 85, 247)',
+                            backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { 
+                            beginAtZero: true, 
+                            grid: { color: gridColor },
+                            ticks: { color: textColor }
+                        },
+                        x: { 
+                            grid: { display: false },
+                            ticks: { color: textColor }
+                        }
+                    },
+                    plugins: {
+                        legend: { 
+                            position: 'top', 
+                            labels: { 
+                                boxWidth: 12, 
+                                font: { size: 11 },
+                                color: textColor
+                            } 
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderDoughnutChart(docs) {
+            // Count classifications
+            const categories = {};
+            docs.forEach(d => {
+                const label = (d.classification && d.classification.label_name) || (d.classification && d.classification.label) || 'Tidak Terklasifikasi';
+                categories[label] = (categories[label] || 0) + 1;
+            });
+
+            const labels = Object.keys(categories);
+            const data = Object.values(categories);
+
+            if (doughnutChartInstance) {
+                doughnutChartInstance.destroy();
+            }
+
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#94a3b8' : '#64748b';
+
+            if (labels.length === 0) {
+                // Renders placeholder if empty
+                const ctx = document.getElementById('doughnutChart').getContext('2d');
+                doughnutChartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Tidak Ada Data'],
+                        datasets: [{ data: [1], backgroundColor: [isDark ? '#1e293b' : '#f1f5f9'] }]
+                    },
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                labels: { color: textColor }
+                            }
+                        }
+                    }
+                });
+                return;
+            }
+
+            const ctx = document.getElementById('doughnutChart').getContext('2d');
+            doughnutChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: [
+                            'rgb(59, 130, 246)',
+                            'rgb(168, 85, 247)',
+                            'rgb(16, 185, 129)',
+                            'rgb(245, 158, 11)',
+                            'rgb(239, 68, 68)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            position: 'bottom', 
+                            labels: { 
+                                boxWidth: 12, 
+                                font: { size: 10 },
+                                color: textColor
+                            } 
+                        }
+                    }
+                }
+            });
+        }
+
+        async function loadAIInsights() {
+            try {
+                // Fetch weekly executive summary
+                const sumRes = await fetch('/insight/weekly-summary');
+                if (sumRes.ok) {
+                    const sumData = await sumRes.json();
+                    document.getElementById('ai-summary-text').innerHTML = `
+                        <div class="space-y-2 text-slate-300 text-sm leading-relaxed">${formatMarkdown(sumData.summary)}</div>
+                        <div class="mt-4 pt-4 border-t border-slate-800 flex justify-between text-xs text-slate-400 font-semibold">
+                            <span>Surat Baru: +${sumData.stats.new_documents}</span>
+                            <span>Tugas Baru: +${sumData.stats.new_reminders}</span>
+                        </div>
+                    `;
+                }
+
+                // Fetch predictive trends
+                const predRes = await fetch('/insight/predictive-trends');
+                if (predRes.ok) {
+                    const predData = await predRes.json();
+                    const container = document.getElementById('predictive-trends-list');
+                    container.innerHTML = '';
+
+                    predData.predictions.forEach(p => {
+                        const pct = Math.round(p.workload_score * 100);
+                        let barColor = 'bg-blue-600';
+                        if (p.workload_score > 0.7) barColor = 'bg-red-600';
+                        else if (p.workload_score > 0.4) barColor = 'bg-amber-500';
+
+                        container.innerHTML += `
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-xs font-semibold text-slate-700">
+                                    <span>${p.month}</span>
+                                    <span>Index: ${p.workload_score.toFixed(2)} (${pct}%)</span>
+                                </div>
+                                <div class="w-full bg-slate-100 rounded-full h-2">
+                                    <div class="${barColor} h-2 rounded-full" style="width: ${pct}%"></div>
+                                </div>
+                                <p class="text-[10px] text-slate-500 italic">${p.reason}</p>
+                            </div>
+                        `;
+                    });
+
+                    container.innerHTML += `
+                        <div class="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-800">
+                            <strong>Saran Amba AI:</strong> ${predData.recommendation}
+                        </div>
+                    `;
+                }
+            } catch (err) {
+                console.error("AI Insights error:", err);
+            }
+        }
+
+        async function loadInstagramInsights() {
+            try {
+                const res = await fetch('/insight/api/insights');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.total_posts !== undefined && data.total_posts > 0) {
+                        instagramInsightsData = data;
+                        instagramInsightsData.isFallback = false;
+                    }
+                }
+            } catch (e) {
+                console.error("Fetch Instagram insights error:", e);
+            }
+
+            // Fallback mock data if fetch failed, returned error, or returned "No data"
+            if (!instagramInsightsData) {
+                instagramInsightsData = {
+                    isFallback: true,
+                    total_posts: 12,
+                    top_accounts: {
+                        "gbikamboja": 10,
+                        "jpcc": 10,
+                        "ndc_worship": 9,
+                        "gmssurabayabarat": 7,
+                        "gkjslawi": 7,
+                        "gmschurch": 2,
+                        "heldbygod.id": 2,
+                        "pustakarajawali": 1,
+                        "sidmohede": 1,
+                        "gkj_tegal": 1
+                    },
+                    likes_distribution: {
+                        "min": 450,
+                        "max": 2400,
+                        "avg": 1240
+                    },
+                    most_active_day: {
+                        "Sunday": 12,
+                        "Friday": 8,
+                        "Saturday": 6,
+                        "Thursday": 4,
+                        "Monday": 3,
+                        "Wednesday": 2,
+                        "Tuesday": 1
+                    },
+                    event_trends: {
+                        "Easter Sunrise Service": 10,
+                        "Community Food Drive": 8,
+                        "Youth Revival Worship": 5
+                    },
+                    word_cloud: [
+                        {"word": "Natal", "count": 28},
+                        {"word": "Paskah", "count": 24},
+                        {"word": "Youth", "count": 20},
+                        {"word": "Worship", "count": 22},
+                        {"word": "Seminar", "count": 18},
+                        {"word": "Retreat", "count": 16},
+                        {"word": "Gereja", "count": 15},
+                        {"word": "Ibadah", "count": 19},
+                        {"word": "AmbaNotes", "count": 25},
+                        {"word": "Surat", "count": 13},
+                        {"word": "Undangan", "count": 14},
+                        {"word": "Tugas", "count": 15},
+                        {"word": "Event", "count": 17},
+                        {"word": "Pimpinan", "count": 12},
+                        {"word": "Suka", "count": 13}
+                    ]
+                };
+            }
+
+            renderInstagramPanel(instagramInsightsData);
+        }
+
+        function renderInstagramPanel(data) {
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#94a3b8' : '#64748b';
+            const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+
+            const dayTranslation = {
+                "Sunday": "Minggu",
+                "Monday": "Senin",
+                "Tuesday": "Selasa",
+                "Wednesday": "Rabu",
+                "Thursday": "Kamis",
+                "Friday": "Jumat",
+                "Saturday": "Sabtu"
+            };
+
+            // 1. Update KPI Card values
+            document.getElementById('ig-kpi-total-posts').textContent = data.total_posts;
+            document.getElementById('ig-kpi-avg-likes').textContent = Math.round(data.likes_distribution.avg).toLocaleString('id-ID');
+            document.getElementById('ig-kpi-likes-range').textContent = `Min: ${data.likes_distribution.min.toLocaleString('id-ID')} | Max: ${data.likes_distribution.max.toLocaleString('id-ID')}`;
+
+            // Find most active day
+            let maxDay = '-';
+            let maxDayCount = -1;
+            if (data.most_active_day && Object.keys(data.most_active_day).length > 0) {
+                for (const [day, count] of Object.entries(data.most_active_day)) {
+                    if (count > maxDayCount) {
+                        maxDayCount = count;
+                        maxDay = dayTranslation[day] || day;
+                    }
+                }
+            }
+            document.getElementById('ig-kpi-active-day').textContent = maxDay;
+
+            // 2. Render Status Badge
+            const badgeContainer = document.getElementById('instagram-status-badge');
+            if (data.isFallback) {
+                badgeContainer.innerHTML = `
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30">
+                        <i data-lucide="info" class="w-3.5 h-3.5 mr-1.5 flex-shrink-0"></i> Preview Data
+                    </span>
+                `;
+            } else {
+                badgeContainer.innerHTML = `
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30">
+                        <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-2 animate-pulse"></span> LIVE SYNC
+                    </span>
+                `;
+            }
+
+            // 3. Render Top Active Accounts Bar Chart
+            const topAccountsSorted = Object.entries(data.top_accounts || {})
+                .sort((a, b) => b[1] - a[1]);
+            const barLabels = topAccountsSorted.map(entry => entry[0]);
+            const barData = topAccountsSorted.map(entry => entry[1]);
+
+            if (instagramBarChartInstance) {
+                instagramBarChartInstance.destroy();
+            }
+
+            const ctxBar = document.getElementById('instagramBarChart').getContext('2d');
+            instagramBarChartInstance = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: barLabels,
+                    datasets: [{
+                        label: 'Jumlah Kiriman',
+                        data: barData,
+                        backgroundColor: 'rgba(236, 72, 153, 0.75)',
+                        borderColor: 'rgb(236, 72, 153)',
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: gridColor },
+                            ticks: {
+                                color: textColor,
+                                stepSize: 1
+                            }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: textColor }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+
+            // 4. Render Active Days Doughnut Chart
+            const activeDaysSorted = Object.entries(data.most_active_day || {})
+                .sort((a, b) => b[1] - a[1]);
+            const doughnutLabels = activeDaysSorted.map(entry => dayTranslation[entry[0]] || entry[0]);
+            const doughnutData = activeDaysSorted.map(entry => entry[1]);
+
+            if (instagramDoughnutChartInstance) {
+                instagramDoughnutChartInstance.destroy();
+            }
+
+            const ctxDoughnut = document.getElementById('instagramDoughnutChart').getContext('2d');
+            instagramDoughnutChartInstance = new Chart(ctxDoughnut, {
+                type: 'doughnut',
+                data: {
+                    labels: doughnutLabels,
+                    datasets: [{
+                        data: doughnutData,
+                        backgroundColor: [
+                            '#ec4899',
+                            '#f43f5e',
+                            '#f97316',
+                            '#eab308',
+                            '#06b6d4',
+                            '#3b82f6',
+                            '#8b5cf6'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 10,
+                                font: { size: 10 },
+                                color: textColor
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 5. Render Event Trends
+            const trendsListContainer = document.getElementById('ig-event-trends-list');
+            trendsListContainer.innerHTML = '';
+            
+            const trends = Object.entries(data.event_trends || {});
+            if (trends.length === 0) {
+                trendsListContainer.innerHTML = '<p class="text-xs text-slate-500 italic">Tidak ada tren event terdeteksi.</p>';
+            } else {
+                const maxVal = Math.max(...trends.map(t => t[1]));
+                const colors = ['bg-pink-500', 'bg-rose-500', 'bg-purple-500', 'bg-blue-500', 'bg-teal-500'];
+                
+                trends.forEach(([name, count], index) => {
+                    const ratio = maxVal > 0 ? (count / maxVal) * 100 : 0;
+                    const color = colors[index % colors.length];
+                    const growthPercent = Math.round(count * 3.5);
+                    
+                    trendsListContainer.innerHTML += `
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between items-center text-xs font-semibold">
+                                <span class="text-slate-700 dark:text-slate-300">${name}</span>
+                                <span class="text-slate-500 dark:text-slate-400 font-medium">${count} Kiriman &nbsp;·&nbsp; <span class="text-emerald-600 font-bold">+${growthPercent}% Suka</span></span>
+                            </div>
+                            <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                                <div class="${color} h-2.5 rounded-full" style="width: ${ratio}%"></div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // 6. Render Word Cloud
+            const wcContainer = document.getElementById('ig-wordcloud-container');
+            wcContainer.innerHTML = '';
+            if (data.word_cloud && data.word_cloud.length > 0) {
+                const maxCount = Math.max(...data.word_cloud.map(w => w.count || 1));
+                const badgeColors = [
+                    'bg-pink-100 text-pink-700 dark:bg-pink-950/30 dark:text-pink-300',
+                    'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300',
+                    'bg-purple-100 text-purple-700 dark:bg-purple-950/30 dark:text-purple-300',
+                    'bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300',
+                    'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300',
+                    'bg-teal-100 text-teal-700 dark:bg-teal-950/30 dark:text-teal-300'
+                ];
+                
+                data.word_cloud.forEach((w, index) => {
+                    const count = w.count || 1;
+                    const size = 11 + 7 * (count / maxCount);
+                    const colorClass = badgeColors[index % badgeColors.length];
+                    wcContainer.innerHTML += `
+                        <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-semibold ${colorClass}" style="font-size: ${size}px; font-weight: ${size > 14 ? '700' : '500'}">
+                            ${w.word}
+                        </span>
+                    `;
+                });
+            } else {
+                wcContainer.innerHTML = '<p class="text-xs text-slate-500 italic">Tidak ada kata kunci terdeteksi.</p>';
+            }
+
+            // 7. Update newly created Lucide Icons
+            lucide.createIcons();
+        }
+
+
+        // ================= ARCHIVES MODULE =================
+        function renderArchivesTable(docs) {
+            const tbody = document.getElementById('archives-table-body');
+            tbody.innerHTML = '';
+
+            if (docs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500">Tidak ada dokumen ditemukan.</td></tr>';
+                return;
+            }
+
+            docs.forEach(doc => {
+                const date = new Date(doc.uploaded_at).toLocaleDateString('id-ID', {
+                    day: 'numeric', month: 'short', year: 'numeric'
+                });
+                const type = doc.classification ? (doc.classification.label_name || doc.classification.label) : 'Tidak Terklasifikasi';
+                const division = doc.delegation_name || 'Umum (General)';
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                        <td class="p-4 font-semibold text-slate-900">${doc.title || doc.filename}</td>
+                        <td class="p-4 text-slate-500">${date}</td>
+                        <td class="p-4">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${type}</span>
+                        </td>
+                        <td class="p-4 text-slate-500 font-medium">${division}</td>
+                        <td class="p-4 text-center space-x-2">
+                            <button onclick="openWorkspaceModal('${doc.doc_id}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold">Workspace</button>
+                            <a href="/document/download/${doc.doc_id}" class="text-slate-600 hover:text-slate-800 text-xs font-bold">Unduh</a>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function filterArchivesTable() {
+            const query = document.getElementById('archive-search-input').value.toLowerCase();
+            const filtered = allDocuments.filter(d => 
+                (d.title && d.title.toLowerCase().includes(query)) ||
+                (d.filename && d.filename.toLowerCase().includes(query)) ||
+                (d.content && d.content.toLowerCase().includes(query))
+            );
+            renderArchivesTable(filtered);
+        }
+
+        function toggleSemanticSearch() {
+            const container = document.getElementById('semantic-search-container');
+            container.classList.toggle('hidden');
+        }
+
+        async function executeSemanticSearch() {
+            const query = document.getElementById('semantic-query-input').value.trim();
+            if (!query) return;
+
+            const info = document.getElementById('semantic-results-info');
+            info.textContent = "Sedang menganalisis makna kueri...";
+            info.classList.remove('hidden');
+
+            try {
+                const res = await fetch('/ai/semantic-search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+                
+                const results = await res.json();
+                
+                // Map results back to local allDocuments structures
+                const matchedDocs = [];
+                results.forEach(item => {
+                    const match = allDocuments.find(d => d.doc_id === item.doc_id);
+                    if (match) {
+                        // Inject score
+                        matchedDocs.push({ ...match, score: item.score });
+                    }
+                });
+
+                info.textContent = `Ditemukan ${matchedDocs.length} hasil kecocokan.`;
+                renderArchivesTable(matchedDocs);
+
+            } catch (err) {
+                console.error("Semantic search error:", err);
+                info.textContent = "Gagal melakukan pencarian semantik.";
+            }
+        }
+
+
+        // ================= WORKSPACE SCREEN MODAL =================
+        async function openWorkspaceModal(docId) {
+            activeDocId = docId;
+            const modal = document.getElementById('workspaceModal');
+            modal.classList.remove('hidden');
+
+            // Reset modal data
+            document.getElementById('modal-doc-title').textContent = "Memuat berkas...";
+            document.getElementById('modal-ai-summary').textContent = "Mengolah ringkasan berkas...";
+            document.getElementById('modal-meta-nosurat').textContent = "-";
+            document.getElementById('modal-meta-instansi').textContent = "-";
+            document.getElementById('modal-meta-perihal').textContent = "-";
+            document.getElementById('modal-suggested-disposisi').textContent = "Menghitung...";
+
+            try {
+                // Fetch document details
+                const res = await fetch(`/document/${docId}`);
+                const doc = await res.json();
+
+                document.getElementById('modal-doc-title').textContent = doc.title || doc.filename;
+                document.getElementById('modal-doc-meta').textContent = `Ekstraksi OCR: ${doc.filename}`;
+                document.getElementById('modal-download-link').href = `/document/download/${docId}`;
+
+                // AI Summary
+                const sumRes = await fetch('/ai/summarize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: doc.content })
+                });
+                if (sumRes.ok) {
+                    const sumData = await sumRes.json();
+                    document.getElementById('modal-ai-summary').innerHTML = formatMarkdown(sumData.summary);
+                } else {
+                    document.getElementById('modal-ai-summary').textContent = "Tidak dapat membuat ringkasan AI.";
+                }
+
+                // Metadata NER
+                const ent = doc.entities || {};
+                document.getElementById('modal-meta-nosurat').textContent = ent.nomor_surat || 'Tidak Terdeteksi';
+                document.getElementById('modal-meta-instansi').textContent = ent.organisasi_penerbit || 'Tidak Terdeteksi';
+                document.getElementById('modal-meta-perihal').textContent = ent.perihal || 'Tidak Terdeteksi';
+
+                // Suggested delegation
+                const delegationNames = allDivisions.map(d => d.name);
+                const sugRes = await fetch('/ai/suggest-disposition', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        text: doc.content,
+                        delegations: delegationNames.length > 0 ? delegationNames : ["General"]
+                    })
+                });
+                if (sugRes.ok) {
+                    const sugData = await sugRes.json();
+                    const suggestedName = sugData.suggested_delegation || 'Umum';
+                    document.getElementById('modal-suggested-disposisi').textContent = `Saran AI: ${suggestedName}`;
+                    document.getElementById('modal-suggested-disposisi').title = sugData.reason || '';
+                } else {
+                    document.getElementById('modal-suggested-disposisi').textContent = "AI: Tidak Ada Saran";
+                    document.getElementById('modal-suggested-disposisi').title = '';
+                }
+
+            } catch (err) {
+                console.error("Workspace details error:", err);
+            }
+        }
+
+        function closeWorkspaceModal() {
+            document.getElementById('workspaceModal').classList.add('hidden');
+            activeDocId = null;
+            
+            // Close chat as well
+            document.getElementById('jarvisChatDock').classList.add('hidden');
+        }
+
+        async function executeDisposisi() {
+            if (!activeDocId) return;
+            const targetDivId = document.getElementById('modal-disposisi-select').value;
+            const btn = document.getElementById('modal-disposisi-btn');
+
+            btn.disabled = true;
+            btn.textContent = "Memproses...";
+
+            try {
+                const res = await fetch(`/document/disposition/${activeDocId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ delegation_id: targetDivId })
+                });
+
+                if (res.ok) {
+                    await showAlert("Sukses", "Disposisi surat berhasil didelegasikan!", "success");
+                    closeWorkspaceModal();
+                    await loadData();
+                } else {
+                    const errData = await res.json();
+                    await showAlert("Gagal", `Gagal disposisi: ${errData.error}`, "error");
+                }
+            } catch (err) {
+                console.error("Disposisi error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Delegasikan";
+            }
+        }
+
+
+        // ================= AMBA AI CHAT WORKSPACE DOCK =================
+        function toggleJarvisChat() {
+            const chat = document.getElementById('jarvisChatDock');
+            chat.classList.toggle('hidden');
+            
+            // Clear message list when opening
+            if (!chat.classList.contains('hidden')) {
+                document.getElementById('chat-messages-container').innerHTML = `
+                    <div class="bg-slate-800 rounded-lg p-3 text-slate-300 max-w-[85%]">
+                        Halo! Saya Amba AI. Silakan tanyakan hal-hal spesifik dari isi dokumen ini.
+                    </div>
+                `;
+            }
+        }
+
+        function handleChatKeyDown(e) {
+            if (e.key === 'Enter') {
+                sendChatMessage();
+            }
+        }
+
+        async function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const query = input.value.trim();
+            if (!query || !activeDocId) return;
+
+            input.value = '';
+
+            const container = document.getElementById('chat-messages-container');
+            // Append User msg
+            container.innerHTML += `
+                <div class="bg-blue-600 rounded-lg p-3 text-white max-w-[85%] self-end ml-auto text-right">
+                    ${query}
+                </div>
+            `;
+            container.scrollTop = container.scrollHeight;
+
+            // Loader block
+            container.innerHTML += `
+                <div id="chat-ai-loader" class="bg-slate-800 rounded-lg p-3 text-slate-400 max-w-[85%] animate-pulse">
+                    Menganalisis dokumen...
+                </div>
+            `;
+            container.scrollTop = container.scrollHeight;
+
+            try {
+                // Fetch document details content first
+                const docRes = await fetch(`/document/${activeDocId}`);
+                const doc = await docRes.json();
+
+                const res = await fetch('/ai/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: query,
+                        context: doc.content,
+                        doc_id: activeDocId
+                    })
+                });
+
+                document.getElementById('chat-ai-loader').remove();
+
+                if (res.ok) {
+                    const data = await res.json();
+                    container.innerHTML += `
+                        <div class="bg-slate-800 rounded-lg p-3 text-slate-300 max-w-[85%] leading-relaxed space-y-2">
+                            ${formatMarkdown(data.answer)}
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML += `
+                        <div class="bg-slate-800 rounded-lg p-3 text-red-400 max-w-[85%]">
+                            Maaf, Amba AI gagal memproses pertanyaan Anda.
+                        </div>
+                    `;
+                }
+                container.scrollTop = container.scrollHeight;
+
+            } catch (err) {
+                console.error("Amba AI chat error:", err);
+                const loader = document.getElementById('chat-ai-loader');
+                if (loader) loader.remove();
+            }
+        }
+
+
+        // ================= STAFF & ORGANIZATION MODULE =================
+        async function renderOrganizationPanel() {
+            // Render divisions CRUD list
+            const divList = document.getElementById('divisions-list');
+            divList.innerHTML = '';
+
+            if (allDivisions.length === 0) {
+                divList.innerHTML = '<li class="py-3 text-sm text-slate-500">Belum ada divisi terdaftar.</li>';
+            } else {
+                allDivisions.forEach(d => {
+                    divList.innerHTML += `
+                        <li class="py-3 text-sm flex justify-between items-center border-b border-slate-100 dark:border-slate-800/40 last:border-0">
+                            <span class="font-semibold text-slate-800 dark:text-slate-200">${d.name}</span>
+                            <div class="flex items-center space-x-2">
+                                <button onclick="executeRenameDivision('${d._id}', '${d.name}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold">Ubah Nama</button>
+                                <span class="text-slate-300 dark:text-slate-700 text-xs">|</span>
+                                <button onclick="executeDeleteDivision('${d._id}')" class="text-red-600 hover:text-red-800 text-xs font-bold">Hapus</button>
+                            </div>
+                        </li>
+                    `;
+                });
+            }
+
+            // Render members table & Mutation dropdowns
+            try {
+                const membersRes = await fetch('/auth/members');
+                const members = await membersRes.json();
+                
+                const mbody = document.getElementById('members-table-body');
+                mbody.innerHTML = '';
+
+                members.forEach(m => {
+                    // Populate current division label
+                    const divObj = allDivisions.find(d => d._id === m.delegation_id);
+                    const divName = divObj ? divObj.name : 'Umum (General)';
+
+                    // Build dynamic selection mutation options
+                    let optionsHtml = `<option value="general">Pindahkan ke Umum (General)</option>`;
+                    allDivisions.forEach(d => {
+                        const isCurrent = m.delegation_id === d._id;
+                        optionsHtml += `<option value="${d._id}" ${isCurrent ? 'selected disabled' : ''}>${d.name}</option>`;
+                    });
+
+                    mbody.innerHTML += `
+                        <tr class="border-b border-slate-100">
+                            <td class="py-3 font-semibold text-slate-800">${m.username}</td>
+                            <td class="py-3 text-slate-500 text-xs">${m.email}</td>
+                            <td class="py-3 text-slate-500 font-semibold text-xs">${divName}</td>
+                            <td class="py-3 text-center">
+                                <select onchange="executeMemberMutation('${m.id}', this)" class="px-2 py-1 border border-slate-200 rounded text-xs text-slate-700 bg-white">
+                                    <option value="" selected disabled>Pilih Divisi Tujuan</option>
+                                    ${optionsHtml}
+                                </select>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+            } catch (err) {
+                console.error("Load members list error:", err);
+            }
+
+            // Render Assets List
+            loadOrganizationAssets();
+        }
+
+        async function loadOrganizationAssets() {
+            try {
+                const assetRes = await fetch('/auth/assets');
+                const assets = await assetRes.json();
+
+                const container = document.getElementById('assets-list-container');
+                container.innerHTML = '';
+
+                if (assets.length === 0) {
+                    container.innerHTML = '<div class="text-sm text-slate-500">Belum ada aset Kop atau TTD digital aktif.</div>';
+                    return;
+                }
+
+                assets.forEach(a => {
+                    const typeLabel = a.type === 'letterhead' ? 'Kop Surat' : 'Tanda Tangan';
+                    const divObj = allDivisions.find(d => d._id === a.delegation_id);
+                    const divName = divObj ? divObj.name : 'Umum (General)';
+                    const isActive = a.is_active || false;
+
+                    container.innerHTML += `
+                        <div class="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                            <div class="flex items-center space-x-3 overflow-hidden">
+                                <div onclick="showAssetPreview('${a.name}', '${a.image_data}')" 
+                                     class="w-12 h-12 bg-white rounded border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                                     title="Klik untuk memperbesar">
+                                    <img src="data:image/png;base64,${a.image_data}" class="max-w-full max-h-full object-contain">
+                                </div>
+                                <div class="overflow-hidden">
+                                    <div class="flex items-center space-x-2">
+                                        <h5 class="text-xs font-bold text-slate-800 truncate">${typeLabel}: ${a.name}</h5>
+                                        <span class="px-1.5 py-0.5 text-[9px] font-bold rounded ${isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}">
+                                            ${isActive ? 'Aktif' : 'Nonaktif'}
+                                        </span>
+                                    </div>
+                                    <span class="text-[10px] text-slate-500 truncate block">${divName}</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-2 flex-shrink-0">
+                                <button onclick="toggleAssetActivation('${a.id}', ${isActive})" class="text-xs font-bold ${isActive ? 'text-slate-500 hover:text-slate-700' : 'text-blue-600 hover:text-blue-800'}">
+                                    ${isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                                </button>
+                                <span class="text-slate-300 text-xs">|</span>
+                                <button onclick="executeDeleteAsset('${a.id}')" class="text-red-600 hover:text-red-800 text-xs font-bold">Hapus</button>
+                            </div>
+                        </div>
+                    `;
+                });
+
+            } catch (err) {
+                console.error("Load assets error:", err);
+            }
+        }
+
+        function showAssetPreview(name, base64Data) {
+            Swal.fire({
+                title: name,
+                imageUrl: `data:image/png;base64,${base64Data}`,
+                imageAlt: name,
+                imageWidth: 320,
+                confirmButtonColor: '#3b82f6',
+                confirmButtonText: 'Tutup',
+                background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
+                color: document.documentElement.classList.contains('dark') ? '#f1f5f9' : '#0f172a',
+            });
+        }
+
+        // Mutation Execute
+        async function executeMemberMutation(targetUserId, selectElem) {
+            const newDivId = selectElem.value;
+            if (!newDivId) return;
+
+            const result = await Swal.fire({
+                title: 'Konfirmasi Mutasi',
+                text: 'Apakah Anda yakin ingin memindahkan pegawai ini ke unit divisi terpilih?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#2563eb',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Ya, Pindahkan',
+                cancelButtonText: 'Batal'
+            });
+
+            if (!result.isConfirmed) {
+                selectElem.value = '';
+                return;
+            }
+
+            try {
+                const res = await fetch('/auth/change-delegation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        target_user_id: targetUserId,
+                        new_delegation_id: newDivId
+                    })
+                });
+
+                if (res.ok) {
+                    await showAlert("Sukses", "Staf berhasil dimutasi divisi!", "success");
+                    await loadData();
+                } else {
+                    const err = await res.json();
+                    await showAlert("Gagal", `Gagal mutasi: ${err.error}`, "error");
+                    selectElem.value = '';
+                }
+
+            } catch (err) {
+                console.error("Mutation error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
+            }
+        }
+
+        // Asset Upload
+        document.getElementById('asset-upload-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const type = document.getElementById('asset-type').value;
+            const delegation = document.getElementById('asset-delegation').value;
+            const fileInput = document.getElementById('asset-file');
+            
+            if (fileInput.files.length === 0) return;
+
+            const reader = new FileReader();
+            reader.readAsDataURL(fileInput.files[0]);
+            reader.onload = async () => {
+                const base64Data = reader.result.split(',')[1];
+                
+                try {
+                    const res = await fetch('/auth/assets', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            type: type,
+                            delegation_id: delegation,
+                            image_data: base64Data
+                        })
+                    });
+
+                    if (res.ok) {
+                        await showAlert("Sukses", "Aset berhasil diunggah!", "success");
+                        fileInput.value = '';
+                        await loadOrganizationAssets();
+                    } else {
+                        const err = await res.json();
+                        await showAlert("Gagal", `Gagal mengunggah aset: ${err.error}`, "error");
+                    }
+                } catch (err) {
+                    console.error("Asset upload error:", err);
+                    await showAlert("Gagal", "Kesalahan koneksi.", "error");
+                }
+            };
+        });
+
+        async function executeDeleteAsset(assetId) {
+            const result = await Swal.fire({
+                title: 'Hapus Aset?',
+                text: 'Hapus aset ini secara permanen dari server?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Ya, Hapus',
+                cancelButtonText: 'Batal'
+            });
+            if (!result.isConfirmed) return;
+
+            try {
+                const res = await fetch(`/auth/assets/${assetId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    await showAlert("Sukses", "Aset berhasil dihapus!", "success");
+                    await loadOrganizationAssets();
+                } else {
+                    await showAlert("Gagal", "Gagal menghapus aset.", "error");
+                }
+            } catch (err) {
+                console.error("Delete asset error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
+            }
+        }
+
+        async function toggleAssetActivation(assetId, currentActive) {
+            const newActiveStatus = !currentActive;
+            try {
+                const res = await fetch(`/auth/assets/${assetId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_active: newActiveStatus })
+                });
+                if (res.ok) {
+                    await showAlert("Sukses", `Status aktif aset berhasil diperbarui!`, "success");
+                    await loadOrganizationAssets();
+                } else {
+                    const err = await res.json();
+                    await showAlert("Gagal", `Gagal mengubah status aktif aset: ${err.error}`, "error");
+                }
+            } catch (err) {
+                console.error("Toggle asset status error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
+            }
+        }
+
+        // Invite Submit
+        document.getElementById('invite-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('invite-email').value;
+            const role = document.getElementById('invite-role').value;
+
+            try {
+                const res = await fetch('/auth/invite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, role })
+                });
+
+                if (res.ok) {
+                    await showAlert("Sukses", "Email undangan berhasil dikirim lewat SMTP!", "success");
+                    document.getElementById('invite-email').value = '';
+                } else {
+                    const err = await res.json();
+                    await showAlert("Gagal", `Gagal mengundang anggota: ${err.error}`, "error");
+                }
+            } catch (err) {
+                console.error("Invite member error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
+            }
+        });
+
+        // Division Modals CRUD
+        function openNewDivisionModal() {
+            document.getElementById('divisionModal').classList.remove('hidden');
+        }
+
+        function closeNewDivisionModal() {
+            document.getElementById('divisionModal').classList.add('hidden');
+            document.getElementById('new-div-name').value = '';
+        }
+
+        async function executeCreateDivision() {
+            const name = document.getElementById('new-div-name').value.trim();
+            if (!name) return;
+
+            try {
+                const res = await fetch('/auth/delegations', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+
+                if (res.ok) {
+                    await showAlert("Sukses", "Divisi baru berhasil dibentuk!", "success");
+                    closeNewDivisionModal();
+                    await loadData();
+                } else {
+                    const err = await res.json();
+                    await showAlert("Gagal", `Gagal membentuk divisi: ${err.error}`, "error");
+                }
+            } catch (err) {
+                console.error("Create division error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
+            }
+        }
+
+        async function executeRenameDivision(divId, currentName) {
+            const isDark = document.documentElement.classList.contains('dark');
+            const { value: newName } = await Swal.fire({
+                title: 'Ubah Nama Divisi',
+                input: 'text',
+                inputLabel: 'Nama Divisi Baru',
+                inputValue: currentName,
+                showCancelButton: true,
+                confirmButtonColor: '#3b82f6',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Simpan',
+                cancelButtonText: 'Batal',
+                background: isDark ? '#0f172a' : '#ffffff',
+                color: isDark ? '#f1f5f9' : '#0f172a',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Nama divisi tidak boleh kosong!';
+                    }
+                }
+            });
+
+            if (newName && newName.trim() !== currentName) {
+                try {
+                    const res = await fetch(`/auth/delegations/${divId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: newName.trim() })
+                    });
+                    if (res.ok) {
+                        await showAlert("Sukses", "Nama divisi berhasil diperbarui!", "success");
+                        await loadData();
+                    } else {
+                        const err = await res.json();
+                        await showAlert("Gagal", `Gagal mengubah nama: ${err.error}`, "error");
+                    }
+                } catch (err) {
+                    console.error("Rename division error:", err);
+                    await showAlert("Gagal", "Kesalahan koneksi.", "error");
+                }
+            }
+        }
+
+        async function loadOrganizationDetails() {
+            try {
+                const res = await fetch('/auth/organization');
+                if (res.ok) {
+                    currentOrganization = await res.json();
+                    document.getElementById('org-display-name').textContent = currentOrganization.name || 'Organisasi Tanpa Nama';
+                    document.getElementById('org-display-invite-code').textContent = currentOrganization.invite_code || '-';
+                } else {
+                    document.getElementById('org-display-name').textContent = 'Gagal Memuat Organisasi';
+                }
+            } catch (err) {
+                console.error("Load organization details error:", err);
+                document.getElementById('org-display-name').textContent = 'Gagal Memuat Organisasi';
+            }
+        }
+
+        async function executeRenameOrganization() {
+            if (!currentOrganization) return;
+            const isDark = document.documentElement.classList.contains('dark');
+            const { value: newName } = await Swal.fire({
+                title: 'Ubah Nama Organisasi',
+                input: 'text',
+                inputLabel: 'Nama Organisasi Baru',
+                inputValue: currentOrganization.name || '',
+                showCancelButton: true,
+                confirmButtonColor: '#3b82f6',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Simpan',
+                cancelButtonText: 'Batal',
+                background: isDark ? '#0f172a' : '#ffffff',
+                color: isDark ? '#f1f5f9' : '#0f172a',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Nama organisasi tidak boleh kosong!';
+                    }
+                }
+            });
+
+            if (newName && newName.trim() !== currentOrganization.name) {
+                try {
+                    const res = await fetch('/auth/organization', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: newName.trim() })
+                    });
+                    if (res.ok) {
+                        await showAlert("Sukses", "Nama organisasi berhasil diperbarui!", "success");
+                        await loadOrganizationDetails();
+                    } else {
+                        const err = await res.json();
+                        await showAlert("Gagal", `Gagal mengubah nama organisasi: ${err.error}`, "error");
+                    }
+                } catch (err) {
+                    console.error("Rename organization error:", err);
+                    await showAlert("Gagal", "Kesalahan koneksi.", "error");
+                }
+            }
+        }
+
+        async function copyInviteCode() {
+            const inviteCodeElement = document.getElementById('org-display-invite-code');
+            const code = inviteCodeElement.textContent.trim();
+            if (!code || code === '...' || code === '-') return;
+            
+            try {
+                await navigator.clipboard.writeText(code);
+                const isDark = document.documentElement.classList.contains('dark');
+                const Toast = Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 2000,
+                    timerProgressBar: true,
+                    background: isDark ? '#0f172a' : '#ffffff',
+                    color: isDark ? '#f1f5f9' : '#0f172a',
+                    didOpen: (toast) => {
+                        toast.addEventListener('mouseenter', Swal.stopTimer)
+                        toast.addEventListener('mouseleave', Swal.resumeTimer)
+                    }
+                });
+                Toast.fire({
+                    icon: 'success',
+                    title: 'Invite Code berhasil disalin!'
+                });
+            } catch (err) {
+                console.error('Failed to copy invite code: ', err);
+                await showAlert("Gagal", "Gagal menyalin invite code.", "error");
+            }
+        }
+
+        async function executeDeleteDivision(divId) {
+            const result = await Swal.fire({
+                title: 'Hapus Divisi?',
+                text: 'Apakah Anda yakin ingin menghapus divisi ini? Semua staf divisi akan otomatis terelokasi ke Umum.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Ya, Hapus',
+                cancelButtonText: 'Batal'
+            });
+            if (!result.isConfirmed) return;
+
+            try {
+                const res = await fetch(`/auth/delegations/${divId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    await showAlert("Sukses", "Divisi berhasil dihapus!", "success");
+                    await loadData();
+                } else {
+                    await showAlert("Gagal", "Gagal menghapus divisi.", "error");
+                }
+            } catch (err) {
+                console.error("Delete division error:", err);
+                await showAlert("Gagal", "Kesalahan koneksi.", "error");
+            }
+        }
+
+        // ================= GANTI PASSWORD HANDLERS =================
+        function openChangePasswordModal() {
+            document.getElementById('changePasswordModal').classList.remove('hidden');
+            document.getElementById('change-old-password').value = '';
+            document.getElementById('change-new-password').value = '';
+            document.getElementById('change-confirm-password').value = '';
+            document.getElementById('change-pwd-alert').classList.add('hidden');
+            lucide.createIcons();
+        }
+
+        function closeChangePasswordModal() {
+            document.getElementById('changePasswordModal').classList.add('hidden');
+        }
+
+        async function executeChangePassword() {
+            const oldPassword = document.getElementById('change-old-password').value;
+            const newPassword = document.getElementById('change-new-password').value;
+            const confirmPassword = document.getElementById('change-confirm-password').value;
+            const alertDiv = document.getElementById('change-pwd-alert');
+
+            if (!oldPassword || !newPassword || !confirmPassword) {
+                alertDiv.textContent = 'Harap isi semua kolom kata sandi.';
+                alertDiv.classList.remove('hidden');
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                alertDiv.textContent = 'Konfirmasi kata sandi tidak cocok.';
+                alertDiv.classList.remove('hidden');
+                return;
+            }
+
+            alertDiv.classList.add('hidden');
+            const btn = document.getElementById('btn-execute-change-pwd');
+            btn.disabled = true;
+            btn.textContent = 'Memproses...';
+
+            try {
+                const res = await fetch('/auth/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    await showAlert('Sukses', 'Kata sandi berhasil diubah!', 'success');
+                    closeChangePasswordModal();
+                } else {
+                    alertDiv.textContent = data.error || 'Gagal mengubah kata sandi.';
+                    alertDiv.classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error("Change password error:", err);
+                alertDiv.textContent = 'Kesalahan koneksi jaringan.';
+                alertDiv.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Ganti Sandi';
+            }
+        }
+        async function loadActivityLogs() {
+            const tbody = document.getElementById('logs-table-body');
+            tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500">Memuat log aktivitas...</td></tr>';
+            try {
+                const res = await fetch('/auth/activity-logs?limit=100');
+                if (!res.ok) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-red-500">Gagal memuat log aktivitas.</td></tr>';
+                    return;
+                }
+                const logs = await res.json();
+                tbody.innerHTML = '';
+                if (logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500">Belum ada riwayat aktivitas.</td></tr>';
+                    return;
+                }
+                logs.forEach(l => {
+                    const dateStr = l.timestamp ? new Date(l.timestamp).toLocaleString('id-ID', {
+                        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                    }) : '-';
+                    const service = l.service ? l.service.toUpperCase() : '-';
+                    const user = l.username || l.user_id || 'System';
+                    const action = l.action || '-';
+                    const message = l.message || '';
+                    
+                    let badgeColor = 'bg-slate-100 text-slate-800';
+                    if (l.severity === 'error') badgeColor = 'bg-red-100 text-red-800';
+                    else if (l.severity === 'warning') badgeColor = 'bg-amber-100 text-amber-800';
+                    else if (l.severity === 'info') badgeColor = 'bg-emerald-100 text-emerald-800';
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50 border-b border-slate-100">
+                            <td class="p-4 text-xs font-medium text-slate-500">${dateStr}</td>
+                            <td class="p-4 text-xs font-semibold text-slate-700">${service}</td>
+                            <td class="p-4 text-xs text-slate-900 font-semibold">${user}</td>
+                            <td class="p-4 text-xs text-slate-600">${message}</td>
+                            <td class="p-4 text-center">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${badgeColor}">${action}</span>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (err) {
+                console.error("Load activity logs error:", err);
+                tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-red-500">Kesalahan koneksi.</td></tr>';
+            }
+        }
+
+        // ================= TEMPLATE EDITOR MODULE (CodeMirror) =================
+        // ================= TEMPLATE EDITOR MODULE (Quill WYSIWYG) =================
+        let quillEditor = null;
+
+        function initTemplateEditor() {
+            if (quillEditor) return; // already initialized
+
+            quillEditor = new Quill('#quill-editor', {
+                theme: 'snow',
+                placeholder: 'Mulai tulis konten surat tugas Anda di sini...\n\nGunakan tombol variabel di atas untuk menyisipkan data dinamis seperti nama organisasi, nomor surat, dll.',
+                modules: {
+                    toolbar: [
+                        [{ 'font': [] }, { 'size': ['small', false, 'large', 'huge'] }],
+                        ['bold', 'italic', 'underline', 'strike'],
+                        [{ 'color': [] }, { 'background': [] }],
+                        [{ 'align': [] }],
+                        [{ 'indent': '-1' }, { 'indent': '+1' }],
+                        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                        ['blockquote', 'code-block'],
+                        ['clean']
+                    ]
+                }
+            });
+
+            // Ctrl+S / Cmd+S to save
+            document.addEventListener('keydown', e => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                    const panel = document.getElementById('panel-templates');
+                    if (!panel.classList.contains('hidden')) {
+                        e.preventDefault();
+                        saveLetterTemplate();
+                    }
+                }
+            });
+
+            loadLetterTemplate();
+        }
+
+        async function loadLetterTemplate() {
+            if (!quillEditor) return;
+            quillEditor.enable(false);
+            quillEditor.setText('Memuat template dari server...');
+            try {
+                const res = await fetch('/generator/templates/surat_tugas');
+                if (res.ok) {
+                    const data = await res.json();
+                    // If the saved content is HTML, put it into the editor
+                    quillEditor.clipboard.dangerouslyPasteHTML(data.content || '');
+                } else {
+                    await showAlert('Gagal', 'Gagal memuat template surat.', 'error');
+                    quillEditor.setText('');
+                }
+            } catch (err) {
+                console.error('Load template error:', err);
+                await showAlert('Gagal', 'Kesalahan koneksi.', 'error');
+                quillEditor.setText('');
+            } finally {
+                quillEditor.enable(true);
+            }
+        }
+
+        async function saveLetterTemplate() {
+            if (!quillEditor) return;
+            // Get the formatted HTML from Quill's editor area
+            const content = quillEditor.root.innerHTML.trim();
+            if (!content || content === '<p><br></p>') {
+                await showAlert('Peringatan', 'Konten template tidak boleh kosong.', 'warning');
+                return;
+            }
+            try {
+                const res = await fetch('/generator/templates/surat_tugas', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                if (res.ok) {
+                    await showAlert('Sukses', 'Template surat tugas berhasil diperbarui!', 'success');
+                } else {
+                    const err = await res.json();
+                    await showAlert('Gagal', `Gagal menyimpan template: ${err.error}`, 'error');
+                }
+            } catch (err) {
+                console.error('Save template error:', err);
+                await showAlert('Gagal', 'Kesalahan koneksi.', 'error');
+            }
+        }
+
+        async function resetTemplateToDefault() {
+            const result = await Swal.fire({
+                title: 'Reset Template?',
+                text: 'Apakah Anda yakin ingin mereset template kembali ke bawaan sistem?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3b82f6',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Ya, Reset',
+                cancelButtonText: 'Batal'
+            });
+            if (!result.isConfirmed) return;
+            try {
+                const res = await fetch('/generator/templates/surat_tugas', { method: 'DELETE' });
+                if (res.ok) {
+                    await showAlert('Sukses', 'Template berhasil direset ke bawaan!', 'success');
+                    await loadLetterTemplate();
+                } else {
+                    await showAlert('Gagal', 'Gagal mereset template.', 'error');
+                }
+            } catch (err) {
+                console.error('Reset template error:', err);
+                await showAlert('Gagal', 'Kesalahan koneksi.', 'error');
+            }
+        }
+
+        // ================= THEME MANAGER =================
+        function applyTheme(theme) {
+            const root = document.documentElement;
+            let actualTheme = theme;
+            
+            if (theme === 'system') {
+                const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                actualTheme = systemPrefersDark ? 'dark' : 'light';
+            }
+            
+            if (actualTheme === 'dark') {
+                root.classList.add('dark');
+            } else {
+                root.classList.remove('dark');
+            }
+            
+            // Save preference
+            localStorage.setItem('theme-preference', theme);
+            
+            // Update Toggle Button UI
+            updateThemeButton(theme);
+            
+            // Re-render charts to adjust text color if charts exist
+            if (typeof allDocuments !== 'undefined' && allDocuments.length > 0) {
+                renderAnalyticsPanel(); 
+            }
+        }
+        
+        function updateThemeButton(theme) {
+            const btn = document.getElementById('theme-toggle-btn');
+            if (!btn) return;
+            
+            let iconHtml = '';
+            let text = '';
+            
+            if (theme === 'system') {
+                iconHtml = '<i data-lucide="monitor" class="w-4 h-4"></i>';
+                text = 'Tema: Sistem';
+            } else if (theme === 'dark') {
+                iconHtml = '<i data-lucide="moon" class="w-4 h-4"></i>';
+                text = 'Tema: Gelap';
+            } else {
+                iconHtml = '<i data-lucide="sun" class="w-4 h-4"></i>';
+                text = 'Tema: Terang';
+            }
+            
+            btn.innerHTML = `${iconHtml}<span>${text}</span>`;
+            lucide.createIcons();
+        }
+        
+        function cycleTheme() {
+            const current = localStorage.getItem('theme-preference') || 'system';
+            let next = 'system';
+            if (current === 'system') next = 'dark';
+            else if (current === 'dark') next = 'light';
+            else next = 'system';
+            
+            applyTheme(next);
+        }
+        
+        // Listen to system preference changes dynamically
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            const current = localStorage.getItem('theme-preference') || 'system';
+            if (current === 'system') {
+                applyTheme('system');
+            }
+        });
+        
+        // Trigger initial theme button sync on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme-preference') || 'system';
+            updateThemeButton(savedTheme);
+        });
+    </script>
+</body>
+</html>

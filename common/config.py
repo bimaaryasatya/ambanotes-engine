@@ -8,6 +8,11 @@ class Config:
     DB_NAME = os.getenv("DB_NAME", "ambanotes")
     COLLECTION_NAME = os.getenv("COLLECTION_NAME", "instagram_events") # Default untuk insight service
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key")
+    JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+    JWT_EXP_HOURS = int(os.getenv("JWT_EXP_HOURS", 8))
+    JWT_ISSUER = os.getenv("JWT_ISSUER", "ambanotes-engine")
+    JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "ambanotes-clients")
+    PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", os.getenv("GATEWAY_URL", "http://localhost:5009"))
     MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "your-mistral-api-key")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "your-gemini-api-key")
     GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:5009")
@@ -15,7 +20,7 @@ class Config:
     # Google OAuth Configuration
     GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "your-google-client-id")
     GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "your-google-client-secret")
-    GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:5000/auth/google/callback")
+    GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "https://notes.bimazznxt.my.id/auth/google/callback")
 
     # Email Config
     MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")

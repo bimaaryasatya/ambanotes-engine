@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash, check_password_hash
-from common.db import users_col, orgs_col, invitations_col, delegations_col, assets_col, docs_col, otps_col
+from common.db import users_col, orgs_col, invitations_col, delegations_col, assets_col, docs_col, otps_col, logs_col
 from common.jwt_utils import generate_token, token_required, role_required
 from common.email_utils import send_otp_email, send_invitation_email
 from common.logger import log_event
@@ -39,6 +39,21 @@ def _validate_username(username: str) -> str | None:
     if not re.match(r"^[a-zA-Z0-9_ ]+$", username):
         return "Nama lengkap hanya boleh mengandung huruf, angka, spasi, dan garis bawah"
     return None
+
+
+def _validate_org_name(name: str) -> str | None:
+    if len(name) < 3 or len(name) > 100:
+        return "Nama organisasi harus antara 3 dan 100 karakter"
+    return None
+
+
+def _find_org_by_id(org_id):
+    if not org_id:
+        return None
+    try:
+        return orgs_col.find_one({"_id": ObjectId(org_id) if isinstance(org_id, str) else org_id})
+    except Exception:
+        return None
 
 
 # --- Endpoints ---
@@ -172,7 +187,16 @@ def register():
     result = users_col.insert_one(user)
     user_id = str(result.inserted_id)
 
-    log_event("auth_service", f"User registered: {username}", user_id=user_id, org_id=org_id)
+    log_event(
+        "auth_service",
+        f"User registered: {username}",
+        user_id=user_id,
+        org_id=org_id,
+        action="REGISTER_SUCCESS",
+        audience="user" if role != "owner" else "owner",
+        visibility="app",
+        severity="info",
+    )
 
     return jsonify({
         "message": "User registered successfully",
@@ -227,9 +251,17 @@ def login():
         return jsonify({"error": "Invalid email or password"}), 401
 
     token = generate_token(user)
-    log_event("auth_service", f"User logged in: {user['username']}", user_id=str(user['_id']), org_id=user.get('org_id'))
-
-    return jsonify({
+    log_event(
+        "auth_service",
+        f"User logged in: {user['username']}",
+        user_id=str(user['_id']),
+        org_id=user.get('org_id'),
+        action="LOGIN_SUCCESS",
+        audience="owner" if user.get('role') == 'owner' else "user",
+        visibility="app",
+        severity="info",
+    )
+    response = jsonify({
         "token": token,
         "user": {
             "id": str(user['_id']),
@@ -239,7 +271,16 @@ def login():
             "org_id": user.get('org_id'),
             "delegation_id": user.get('delegation_id')
         }
-    }), 200
+    })
+    response.set_cookie(
+        key="token",
+        value=token,
+        httponly=True,
+        samesite="Lax",
+        max_age=Config.JWT_EXP_HOURS * 3600,
+        path="/"
+    )
+    return response, 200
 
 
 @auth_bp.route('/profile', methods=['GET'])
@@ -285,13 +326,15 @@ def get_profile(current_user):
         "role": user.get('role', 'member'),
         "org_id": user.get('org_id'),
         "delegation_id": user.get('delegation_id'),
-        "google_drive_connected": user.get('google_drive_connected', False)
+        "google_drive_connected": user.get('google_drive_connected', False),
+        "profile_image_data": user.get('profile_image_data'),
     }
     
     if user.get('org_id'):
         try:
             org = orgs_col.find_one({"_id": ObjectId(user['org_id'])})
             if org:
+                user_data['org_name'] = org.get('name') or "Personal Workspace"
                 invite_code = org.get('invite_code')
                 if not invite_code:
                     import random
@@ -305,6 +348,8 @@ def get_profile(current_user):
                 user_data['invite_code'] = invite_code
         except Exception as e:
             print(f"Error fetching org invite code: {e}")
+    else:
+        user_data['org_name'] = "Personal Workspace"
     
     if user.get('delegation_id'):
         try:
@@ -316,6 +361,260 @@ def get_profile(current_user):
             user_data['delegation_name'] = "Invalid Delegation ID"
 
     return jsonify(user_data), 200
+
+
+@auth_bp.route('/profile', methods=['PUT'])
+@token_required
+def update_profile(current_user):
+    """
+    Update Current User Profile
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            username:
+              type: string
+            profile_image_data:
+              type: string
+            org_name:
+              type: string
+    responses:
+      200:
+        description: Profile updated successfully
+    """
+    user_id = current_user.get('user_id')
+    data = request.get_json(force=True, silent=True) or {}
+
+    try:
+        user = users_col.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        return jsonify({"error": "Invalid user ID in token"}), 400
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    update_fields = {}
+    username = (data.get('username') or '').strip()
+    profile_image_data = data.get('profile_image_data')
+    org_name = (data.get('org_name') or '').strip()
+
+    if username:
+        u_error = _validate_username(username)
+        if u_error:
+            return jsonify({"error": u_error}), 400
+
+        existing_user = users_col.find_one({
+            "username": username,
+            "_id": {"$ne": user["_id"]},
+        })
+        if existing_user:
+            return jsonify({"error": "Username already exists"}), 400
+        update_fields["username"] = username
+
+    if profile_image_data is not None:
+        update_fields["profile_image_data"] = profile_image_data
+
+    if update_fields:
+        users_col.update_one({"_id": user["_id"]}, {"$set": update_fields})
+
+    if org_name:
+        if current_user.get('role') != 'owner':
+            return jsonify({"error": "Only organization owner can rename the organization"}), 403
+        if len(org_name) < 3 or len(org_name) > 80:
+            return jsonify({"error": "Organization name must be between 3 and 80 characters"}), 400
+        if not user.get('org_id'):
+            return jsonify({"error": "Organization not found for current user"}), 404
+        orgs_col.update_one(
+            {"_id": ObjectId(user['org_id'])},
+            {"$set": {"name": org_name}}
+        )
+
+    updated_user = users_col.find_one({"_id": user["_id"]}) or user
+    updated_org_name = None
+    if updated_user.get('org_id'):
+        org = orgs_col.find_one({"_id": ObjectId(updated_user['org_id'])})
+        if org:
+            updated_org_name = org.get('name')
+
+    log_event(
+        "auth_service",
+        f"Profile updated for user: {updated_user.get('username', user_id)}",
+        user_id=user_id,
+        org_id=current_user.get('org_id'),
+        action="PROFILE_UPDATE",
+        audience="owner" if updated_user.get("role") == "owner" else "user",
+        visibility="app",
+        severity="info",
+    )
+
+    return jsonify({
+        "message": "Profile updated successfully",
+        "user": {
+            "id": str(updated_user["_id"]),
+            "username": updated_user.get("username", ""),
+            "email": updated_user.get("email", ""),
+            "role": updated_user.get("role", "member"),
+            "org_id": updated_user.get("org_id"),
+            "org_name": updated_org_name,
+            "profile_image_data": updated_user.get("profile_image_data"),
+        }
+    }), 200
+
+
+@auth_bp.route('/activity-logs', methods=['GET'])
+@token_required
+def get_activity_logs(current_user):
+    """
+    Get Current User Activity Logs
+    ---
+    tags:
+      - Auth
+    produces:
+      - application/json
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: Authorization
+        in: header
+        type: string
+        required: true
+        description: "Format: Bearer <token>"
+        default: "Bearer "
+      - name: limit
+        in: query
+        type: integer
+        required: false
+        description: Maximum number of activity logs to return
+    responses:
+      200:
+        description: User activity logs
+    """
+    user_id = current_user.get('user_id')
+    org_id = current_user.get('org_id')
+    role = current_user.get('role')
+    limit = request.args.get('limit', default=50, type=int) or 50
+    limit = max(1, min(limit, 200))
+
+    try:
+        query = {
+            "audience": {
+                "$in": ["user", "owner"]
+            },
+            "visibility": "app",
+        }
+
+        if role == 'owner' and org_id:
+            query["org_id"] = org_id
+        else:
+            query["user_id"] = user_id
+
+        logs = list(
+            logs_col.find(query)
+            .sort("timestamp", -1)
+            .limit(limit)
+        )
+
+        result = []
+        for item in logs:
+            result.append({
+                "id": str(item.get("_id")),
+                "service": item.get("service"),
+                "message": item.get("message"),
+                "action": item.get("action"),
+                "metadata": item.get("metadata", {}),
+                "timestamp": item.get("timestamp").isoformat() if item.get("timestamp") else None,
+            })
+        return jsonify(result), 200
+    except Exception as e:
+        log_event(
+            "auth_service",
+            f"Failed to fetch activity logs for user: {user_id}",
+            user_id=user_id,
+            org_id=current_user.get('org_id'),
+            action="ACTIVITY_LOGS_FETCH_FAILED",
+            metadata={"error": str(e)},
+            audience="developer",
+            visibility="internal",
+            severity="error",
+        )
+        return jsonify({"error": "Failed to fetch activity logs"}), 500
+
+
+@auth_bp.route('/organization', methods=['GET'])
+@token_required
+def get_organization(current_user):
+    """
+    Get Organization Details
+    """
+    org_id = current_user.get('org_id')
+    if not org_id:
+        return jsonify({"error": "Organization not found"}), 404
+    try:
+        org = orgs_col.find_one({"_id": ObjectId(org_id)})
+        if not org:
+            return jsonify({"error": "Organization not found"}), 404
+        return jsonify({
+            "id": str(org['_id']),
+            "name": org.get('name'),
+            "invite_code": org.get('invite_code')
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@auth_bp.route('/organization', methods=['PUT'])
+@token_required
+@role_required('owner')
+def update_organization(current_user):
+    """
+    Update Organization Name (Owner Only)
+    ---
+    tags:
+      - Enterprise
+    security:
+      - BearerAuth: []
+    """
+    org_id = current_user.get('org_id')
+    data = request.get_json(force=True, silent=True) or {}
+    name = data.get('name', '').strip()
+
+    if not org_id:
+        return jsonify({"error": "Organization not found"}), 404
+    if not name:
+        return jsonify({"error": "Nama organisasi tidak boleh kosong"}), 400
+
+    org_error = _validate_org_name(name)
+    if org_error:
+        return jsonify({"error": org_error}), 400
+
+    result = orgs_col.update_one(
+        {"_id": ObjectId(org_id)},
+        {"$set": {"name": name, "updated_at": datetime.datetime.utcnow()}}
+    )
+    if result.matched_count == 0:
+        return jsonify({"error": "Organization not found"}), 404
+
+    log_event(
+        "auth_service",
+        f"Organization renamed to {name}",
+        user_id=current_user.get('user_id'),
+        org_id=org_id,
+        action="ORGANIZATION_UPDATE"
+    )
+
+    return jsonify({"message": "Organization updated successfully", "org_name": name}), 200
 
 
 @auth_bp.route('/delegations', methods=['POST'])
@@ -366,6 +665,17 @@ def create_delegation(current_user):
     result = delegations_col.insert_one(delegation)
     delegation['_id'] = str(result.inserted_id)
     delegation['created_at'] = delegation['created_at'].isoformat()
+
+    log_event(
+        "auth_service",
+        f"Membuat divisi baru '{name}'",
+        user_id=current_user.get('user_id'),
+        org_id=org_id,
+        action="DELEGATION_CREATE",
+        audience="owner",
+        visibility="app",
+        severity="info"
+    )
 
     return jsonify(delegation), 201
 
@@ -463,7 +773,23 @@ def change_delegation(current_user):
         users_col.update_one({"_id": ObjectId(target_user_id)}, {"$set": {"delegation_id": None}})
         docs_col.update_many({"uploaded_by": target_user_id}, {"$set": {"delegation_id": None}})
         docs_col.update_many({"uploaded_by": ObjectId(target_user_id)}, {"$set": {"delegation_id": None}})
-        return jsonify({"message": f"User {target_user['username']} moved to General"}), 200
+        log_event(
+            "auth_service",
+            f"Memindahkan anggota {target_user['username']} ke Umum (General)",
+            user_id=current_user.get('user_id'),
+            org_id=org_id,
+            action="MEMBER_DELEGATION_CHANGED",
+            metadata={
+                "target_user_id": target_user_id,
+                "target_username": target_user["username"],
+                "new_delegation_id": None,
+                "new_delegation_name": "General",
+            },
+            audience="owner",
+            visibility="app",
+            severity="info",
+        )
+        return jsonify({"message": f"Anggota {target_user['username']} berhasil dipindahkan ke Umum (General)"}), 200
 
     try:
         new_delegation = delegations_col.find_one({"_id": ObjectId(new_del_id), "org_id": org_id})
@@ -476,8 +802,24 @@ def change_delegation(current_user):
     users_col.update_one({"_id": ObjectId(target_user_id)}, {"$set": {"delegation_id": new_del_id}})
     docs_col.update_many({"uploaded_by": target_user_id}, {"$set": {"delegation_id": new_del_id}})
     docs_col.update_many({"uploaded_by": ObjectId(target_user_id)}, {"$set": {"delegation_id": new_del_id}})
+    log_event(
+        "auth_service",
+        f"Memindahkan anggota {target_user['username']} ke divisi {new_delegation['name']}",
+        user_id=current_user.get('user_id'),
+        org_id=org_id,
+        action="MEMBER_DELEGATION_CHANGED",
+        metadata={
+            "target_user_id": target_user_id,
+            "target_username": target_user["username"],
+            "new_delegation_id": new_del_id,
+            "new_delegation_name": new_delegation["name"],
+        },
+        audience="owner",
+        visibility="app",
+        severity="info",
+    )
 
-    return jsonify({"message": f"User {target_user['username']} moved to {new_delegation['name']}"}), 200
+    return jsonify({"message": f"Anggota {target_user['username']} berhasil dipindahkan ke divisi {new_delegation['name']}"}), 200
 
 
 @auth_bp.route('/assets', methods=['POST'])
@@ -533,18 +875,42 @@ def upload_asset(current_user):
 
     normalized_type = "letterhead" if asset_type in ['kop', 'letterhead'] else "signature" if asset_type in ['ttd', 'signature'] else asset_type
 
+    # Normalize delegation_id: if general or empty, set to None
+    if not delegation_id or delegation_id == 'general' or delegation_id == '':
+        normalized_delegation_id = None
+    else:
+        normalized_delegation_id = delegation_id
+
     assets_col.update_one(
         {"type": normalized_type, "org_id": org_id, "name": name},
-        {"$set": {
-            "type": normalized_type,
-            "delegation_id": delegation_id if delegation_id else None,
-            "org_id": org_id,
-            "name": name,
-            "image_data": image_data,
-            "updated_at": datetime.datetime.utcnow()
-        }},
+        {
+            "$set": {
+                "type": normalized_type,
+                "delegation_id": normalized_delegation_id,
+                "org_id": org_id,
+                "name": name,
+                "image_data": image_data,
+                "updated_at": datetime.datetime.utcnow()
+            },
+            "$setOnInsert": {
+                "is_active": False
+            }
+        },
         upsert=True
     )
+
+    asset_type_label = "Kop Surat" if normalized_type == "letterhead" else "Tanda Tangan"
+    log_event(
+        "auth_service",
+        f"Mengunggah aset {asset_type_label} baru '{name}'",
+        user_id=current_user.get('user_id'),
+        org_id=org_id,
+        action="ASSET_UPLOAD",
+        audience="owner",
+        visibility="app",
+        severity="info"
+    )
+
     return jsonify({"message": f"Asset {asset_type} ({name}) uploaded successfully"}), 201
 
 
@@ -555,7 +921,41 @@ def list_assets(current_user):
     List All Assets (Kop & TTD) in Organization
     """
     org_id = current_user.get('org_id')
+
+    # Prefetch all delegations to avoid N+1 query
+    try:
+        delegations = list(delegations_col.find({"org_id": org_id}))
+        delegation_map = {str(d["_id"]): d.get("name") for d in delegations}
+    except Exception:
+        delegation_map = {}
+
     assets = list(assets_col.find({"org_id": org_id}))
+    asset_list = []
+    for a in assets:
+        delegation_name = None
+        del_id = a.get('delegation_id')
+        if del_id:
+            delegation_name = delegation_map.get(str(del_id))
+        asset_list.append({
+            "id": str(a['_id']),
+            "type": "kop" if a.get('type') == "letterhead" else "ttd" if a.get('type') == "signature" else a.get('type'),
+            "name": a.get('name', 'Tanpa Nama'),
+            "delegation_id": del_id,
+            "delegation_name": delegation_name,
+            "image_data": a.get('image_data'),
+            "is_active": a.get('is_active', False)
+        })
+    return jsonify(asset_list), 200
+
+
+@auth_bp.route('/assets/by-delegation/<delegation_id>', methods=['GET'])
+@token_required
+def get_assets_by_delegation(current_user, delegation_id):
+    """
+    Get Assets (Kop & TTD) for a Specific Delegation
+    """
+    org_id = current_user.get('org_id')
+    assets = list(assets_col.find({"org_id": org_id, "delegation_id": delegation_id}))
     asset_list = []
     for a in assets:
         asset_list.append({
@@ -563,7 +963,8 @@ def list_assets(current_user):
             "type": "kop" if a.get('type') == "letterhead" else "ttd" if a.get('type') == "signature" else a.get('type'),
             "name": a.get('name', 'Tanpa Nama'),
             "delegation_id": a.get('delegation_id'),
-            "image_data": a.get('image_data')
+            "image_data": a.get('image_data'),
+            "is_active": a.get('is_active', False)
         })
     return jsonify(asset_list), 200
 
@@ -598,14 +999,29 @@ def delete_asset(current_user, asset_id):
     """
     org_id = current_user.get('org_id')
     try:
+        # Fetch target asset details first for logging
+        target_asset = assets_col.find_one({"_id": ObjectId(asset_id), "org_id": org_id})
+        asset_name = target_asset.get('name', 'Tanpa Nama') if target_asset else 'Tanpa Nama'
+        asset_type_label = "Kop Surat" if target_asset and target_asset.get('type') == 'letterhead' else "Tanda Tangan" if target_asset and target_asset.get('type') == 'signature' else "Aset"
+
         result = assets_col.delete_one({"_id": ObjectId(asset_id), "org_id": org_id})
         if result.deleted_count == 0:
             return jsonify({"error": "Asset not found"}), 404
-        log_event("auth_service", f"Asset {asset_id} deleted",
-                  user_id=current_user.get('user_id'), org_id=org_id, action="ASSET_DELETE")
+
+        log_event(
+            "auth_service",
+            f"Menghapus aset {asset_type_label} '{asset_name}'",
+            user_id=current_user.get('user_id'),
+            org_id=org_id,
+            action="ASSET_DELETE",
+            audience="owner",
+            visibility="app",
+            severity="info"
+        )
         return jsonify({"message": "Asset deleted successfully"}), 200
     except Exception as e:
-        return jsonify({"error": "Invalid asset ID", "details": str(e)}), 400
+        log_event("auth_service", f"Invalid asset ID for deletion: {str(e)}", org_id=org_id, severity="error")
+        return jsonify({"error": "Invalid asset ID"}), 400
 
 
 @auth_bp.route('/assets/<asset_id>', methods=['PUT'])
@@ -655,22 +1071,83 @@ def update_asset(current_user, asset_id):
         update_fields['name'] = data['name'].strip()
     if 'image_data' in data and data['image_data']:
         update_fields['image_data'] = data['image_data']
+    if 'is_active' in data:
+        update_fields['is_active'] = bool(data['is_active'])
 
     if len(update_fields) <= 1:
         return jsonify({"error": "No fields to update"}), 400
 
     try:
+        target_asset = assets_col.find_one({"_id": ObjectId(asset_id), "org_id": org_id})
+        if not target_asset:
+            return jsonify({"error": "Asset not found"}), 404
+
+        # Exclusive activation: if activating this asset, deactivate all other assets
+        # of the same type and delegation in this org
+        if update_fields.get('is_active') == True:
+            try:
+                same_type = target_asset.get('type')
+                same_delegation = target_asset.get('delegation_id')
+                
+                # Normalize delegation query to cover None, "general", ""
+                if not same_delegation or same_delegation == 'general' or same_delegation == '':
+                    delegation_query = {"$in": [None, "general", ""]}
+                else:
+                    delegation_query = same_delegation
+
+                # Deactivate all other assets with same type + delegation in this org
+                assets_col.update_many(
+                    {
+                        "_id": {"$ne": ObjectId(asset_id)},
+                        "type": same_type,
+                        "delegation_id": delegation_query,
+                        "org_id": org_id
+                    },
+                    {"$set": {"is_active": False}}
+                )
+            except Exception as ex:
+                print(f"Exclusive activation error: {ex}")
+
         result = assets_col.update_one(
             {"_id": ObjectId(asset_id), "org_id": org_id},
             {"$set": update_fields}
         )
         if result.matched_count == 0:
             return jsonify({"error": "Asset not found"}), 404
-        log_event("auth_service", f"Asset {asset_id} updated",
-                  user_id=current_user.get('user_id'), org_id=org_id, action="ASSET_UPDATE")
+
+        # Determine the log message based on what fields were updated
+        asset_type_label = "Kop Surat" if target_asset.get('type') == "letterhead" else "Tanda Tangan"
+        old_name = target_asset.get('name', 'Tanpa Nama')
+        
+        log_msgs = []
+        if 'name' in update_fields:
+            log_msgs.append(f"mengubah nama aset {asset_type_label} dari '{old_name}' menjadi '{update_fields['name']}'")
+        if 'image_data' in update_fields:
+            log_msgs.append(f"memperbarui berkas gambar aset {asset_type_label} '{update_fields.get('name', old_name)}'")
+        if 'is_active' in update_fields:
+            status_str = "mengaktifkan" if update_fields['is_active'] else "menonaktifkan"
+            log_msgs.append(f"{status_str} aset {asset_type_label} '{update_fields.get('name', old_name)}'")
+            
+        log_message = ", ".join(log_msgs)
+        if log_message:
+            log_message = log_message[0].upper() + log_message[1:]
+        else:
+            log_message = f"Memperbarui aset {asset_type_label} '{old_name}'"
+
+        log_event(
+            "auth_service",
+            log_message,
+            user_id=current_user.get('user_id'),
+            org_id=org_id,
+            action="ASSET_UPDATE",
+            audience="owner",
+            visibility="app",
+            severity="info"
+        )
         return jsonify({"message": "Asset updated successfully"}), 200
     except Exception as e:
-        return jsonify({"error": "Invalid asset ID", "details": str(e)}), 400
+        log_event("auth_service", f"Invalid asset ID for update: {str(e)}", org_id=org_id, severity="error")
+        return jsonify({"error": "Invalid asset ID"}), 400
 
 
 @auth_bp.route('/delegations/<delegation_id>', methods=['PUT'])
@@ -688,18 +1165,31 @@ def update_delegation(current_user, delegation_id):
         return jsonify({"error": "Delegation name is required"}), 400
 
     try:
+        # Get old name first for logging
+        delegation = delegations_col.find_one({"_id": ObjectId(delegation_id), "org_id": org_id})
+        old_name = delegation.get('name') if delegation else 'Divisi'
+
         result = delegations_col.update_one(
             {"_id": ObjectId(delegation_id), "org_id": org_id},
             {"$set": {"name": name}}
         )
         if result.matched_count == 0:
             return jsonify({"error": "Delegation not found"}), 404
-            
-        log_event("auth_service", f"Delegation renamed to {name}", 
-                  user_id=current_user.get('user_id'), org_id=org_id, action="DELEGATION_RENAME")
+
+        log_event(
+            "auth_service",
+            f"Mengubah nama divisi '{old_name}' menjadi '{name}'", 
+            user_id=current_user.get('user_id'),
+            org_id=org_id,
+            action="DELEGATION_RENAME",
+            audience="owner",
+            visibility="app",
+            severity="info"
+        )
         return jsonify({"message": "Delegation name updated successfully"}), 200
     except Exception as e:
-        return jsonify({"error": "Invalid delegation ID format", "details": str(e)}), 400
+        log_event("auth_service", f"Invalid delegation ID for update: {str(e)}", org_id=org_id, severity="error")
+        return jsonify({"error": "Invalid delegation ID format"}), 400
 
 
 @auth_bp.route('/delegations/<delegation_id>', methods=['DELETE'])
@@ -725,11 +1215,20 @@ def delete_delegation(current_user, delegation_id):
         # Finally delete the delegation itself
         delegations_col.delete_one({"_id": ObjectId(delegation_id)})
         
-        log_event("auth_service", f"Delegation {delegation.get('name')} deleted", 
-                  user_id=current_user.get('user_id'), org_id=org_id, action="DELEGATION_DELETE")
+        log_event(
+            "auth_service",
+            f"Menghapus divisi '{delegation.get('name')}'", 
+            user_id=current_user.get('user_id'),
+            org_id=org_id,
+            action="DELEGATION_DELETE",
+            audience="owner",
+            visibility="app",
+            severity="info"
+        )
         return jsonify({"message": "Delegation deleted successfully and members migrated to general"}), 200
     except Exception as e:
-        return jsonify({"error": "Invalid delegation ID format", "details": str(e)}), 400
+        log_event("auth_service", f"Invalid delegation ID for deletion: {str(e)}", org_id=org_id, severity="error")
+        return jsonify({"error": "Invalid delegation ID format"}), 400
 
 
 @auth_bp.route('/members', methods=['GET'])
@@ -764,19 +1263,21 @@ def list_members(current_user):
         return jsonify([]), 200
 
     try:
+        # Prefetch all delegations to avoid N+1 queries
+        try:
+            delegations = list(delegations_col.find({"org_id": org_id}))
+            delegation_map = {str(d["_id"]): d.get("name") for d in delegations}
+        except Exception:
+            delegation_map = {}
+
         users = list(users_col.find({"org_id": org_id}))
         member_list = []
         for u in users:
-            # Look up delegation name if delegation_id exists
+            # Look up delegation name if delegation_id exists from pre-fetched map
             delegation_name = None
             del_id = u.get('delegation_id')
             if del_id:
-                try:
-                    delegation = delegations_col.find_one({"_id": ObjectId(del_id)})
-                    if delegation:
-                        delegation_name = delegation.get('name')
-                except Exception:
-                    pass
+                delegation_name = delegation_map.get(str(del_id))
 
             member_list.append({
                 "id": str(u['_id']),
@@ -788,7 +1289,8 @@ def list_members(current_user):
             })
         return jsonify(member_list), 200
     except Exception as e:
-        return jsonify({"error": f"Failed to retrieve members: {str(e)}"}), 500
+        log_event("auth_service", f"Failed to retrieve members: {str(e)}", org_id=org_id, severity="error")
+        return jsonify({"error": "Failed to retrieve members"}), 500
 
 
 @auth_bp.route('/invite', methods=['POST'])
@@ -860,6 +1362,17 @@ def invite_member(current_user):
         "status": "pending", 
         "created_at": datetime.datetime.utcnow()
     })
+    log_event(
+        "auth_service",
+        f"Mengirim undangan bergabung ke {email}",
+        user_id=current_user.get("user_id"),
+        org_id=org_id,
+        action="INVITE_MEMBER_SUCCESS",
+        metadata={"email": email, "role": role},
+        audience="owner",
+        visibility="app",
+        severity="info",
+    )
 
     return jsonify({"message": "Invitation sent successfully to email"}), 201
 
@@ -1092,6 +1605,7 @@ def reset_password():
 
 @auth_bp.route('/google/disconnect', methods=['POST'])
 @token_required
+@role_required('owner')
 def google_disconnect(current_user):
     """
     Disconnect Google Drive Account
@@ -1117,11 +1631,19 @@ def google_disconnect(current_user):
                 }
             }
         )
-        log_event("auth_service", f"User {user_id} disconnected Google Drive", user_id=user_id, action="GOOGLE_DRIVE_DISCONNECTED")
+        log_event(
+            "auth_service",
+            f"User {user_id} disconnected Google Drive",
+            user_id=user_id,
+            action="GOOGLE_DRIVE_DISCONNECTED",
+            audience="owner",
+            visibility="app",
+            severity="info",
+        )
         return jsonify({"message": "Google Drive berhasil diputuskan."}), 200
     except Exception as e:
-        log_event("auth_service", f"Gagal memutuskan Google Drive: {str(e)}", user_id=user_id, action="GOOGLE_DRIVE_DISCONNECT_FAILED")
-        return jsonify({"error": f"Gagal memutuskan koneksi: {str(e)}"}), 500
+        log_event("auth_service", f"Gagal memutuskan Google Drive: {str(e)}", user_id=user_id, action="GOOGLE_DRIVE_DISCONNECT_FAILED", severity="error")
+        return jsonify({"error": "Gagal memutuskan koneksi Google Drive"}), 500
 
 
 @auth_bp.route('/google/connect', methods=['GET'])
@@ -1210,7 +1732,15 @@ def google_callback():
         if result.matched_count == 0:
             return "<h3>Error: Pengguna tidak ditemukan di sistem.</h3>", 404
             
-        log_event("auth_service", f"Google Drive successfully connected for user: {user_id}", user_id=user_id, action="GOOGLE_DRIVE_CONNECTED")
+        log_event(
+            "auth_service",
+            f"Google Drive successfully connected for user: {user_id}",
+            user_id=user_id,
+            action="GOOGLE_DRIVE_CONNECTED",
+            audience="owner",
+            visibility="app",
+            severity="info",
+        )
         
         # Memicu migrasi dokumen lama dari MongoDB ke Google Drive
         try:
@@ -1247,10 +1777,11 @@ def google_callback():
         """, 200
         
     except Exception as e:
-        log_event("auth_service", f"Error sewaktu Google Callback: {str(e)}", user_id=user_id, action="GOOGLE_CALLBACK_ERROR")
-        return f"<h3>Terjadi kesalahan sistem: {str(e)}</h3>", 500
+        log_event("auth_service", f"Error sewaktu Google Callback: {str(e)}", user_id=user_id, action="GOOGLE_CALLBACK_ERROR", severity="error")
+        return "<h3>Terjadi kesalahan sistem sewaktu Google Drive callback</h3>", 500
 
 
 @auth_bp.route('/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "healthy", "service": "auth_service"}), 200
+

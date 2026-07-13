@@ -3,21 +3,50 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import request, jsonify
 from common.config import Config
+import secrets
+
+
+def _get_jwt_secret():
+    secret = Config.JWT_SECRET_KEY or ""
+    if len(secret) < 32:
+        raise ValueError(
+            "JWT_SECRET_KEY must be at least 32 characters long for secure JWT signing"
+        )
+    return secret
 
 
 def generate_token(user):
+    now = datetime.utcnow()
+    delegation_id = user.get("delegation_id")
+    if delegation_id:
+        delegation_id = str(delegation_id)
     payload = {
         "user_id": str(user["_id"]),
         "username": user["username"],
         "role": user["role"],
         "org_id": user.get("org_id"),
-        "exp": datetime.utcnow() + timedelta(hours=8)
+        "delegation_id": delegation_id,
+        "iss": Config.JWT_ISSUER,
+        "aud": Config.JWT_AUDIENCE,
+        "iat": now,
+        "nbf": now,
+        "jti": secrets.token_hex(16),
+        "exp": now + timedelta(hours=Config.JWT_EXP_HOURS),
     }
-    return jwt.encode(payload, Config.JWT_SECRET_KEY, algorithm="HS256")
+    return jwt.encode(payload, _get_jwt_secret(), algorithm=Config.JWT_ALGORITHM)
 
 
 def verify_token(token):
-    return jwt.decode(token, Config.JWT_SECRET_KEY, algorithms=["HS256"])
+    return jwt.decode(
+        token,
+        _get_jwt_secret(),
+        algorithms=[Config.JWT_ALGORITHM],
+        issuer=Config.JWT_ISSUER,
+        audience=Config.JWT_AUDIENCE,
+        options={
+            "require": ["exp", "iat", "nbf", "iss", "aud", "jti", "user_id"],
+        },
+    )
 
 
 def token_required(f):
@@ -35,21 +64,34 @@ def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
-        # Debug: log the auth header received
-        print(f"[AUTH DEBUG] Authorization header: '{auth_header[:50]}...' (len={len(auth_header)})")
-        
-        if not auth_header:
-            return jsonify({"error": "Authorization header missing"}), 401
+        token = None
 
-        # Handle both "Bearer <token>" and raw "<token>"
-        if auth_header.startswith("Bearer "):
-            token = auth_header.split(" ", 1)[1]
+        if auth_header:
+            # Handle both "Bearer <token>" and raw "<token>"
+            if auth_header.startswith("Bearer "):
+                token = auth_header.split(" ", 1)[1]
+            else:
+                token = auth_header
         else:
-            token = auth_header
+            # Fallback to cookies
+            token = request.cookies.get("token")
+
+        if not token:
+            return jsonify({"error": "Authorization token is missing"}), 401
         try:
             payload = verify_token(token)
+        except ValueError as e:
+            from common.logger import log_event
+            log_event("jwt_utils", f"JWT Secret Key configuration validation failed: {str(e)}", severity="error")
+            return jsonify({"error": "Authentication system misconfigured"}), 500
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "Token has expired"}), 401
+        except jwt.InvalidAudienceError:
+            return jsonify({"error": "Invalid token audience"}), 401
+        except jwt.InvalidIssuerError:
+            return jsonify({"error": "Invalid token issuer"}), 401
+        except jwt.MissingRequiredClaimError as e:
+            return jsonify({"error": f"Missing token claim: {e.claim}"}), 401
         except jwt.InvalidTokenError:
             return jsonify({"error": "Invalid token"}), 401
 

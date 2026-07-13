@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - AmbaNotes Dashboard</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
+        <!-- Header Banner -->
+        <div class="px-8 pt-8 pb-6 bg-slate-900 text-white relative">
+            <div class="absolute top-0 right-0 w-24 h-24 bg-blue-600 rounded-full filter blur-2xl opacity-30 -mr-6 -mt-6"></div>
+            <div class="flex items-center space-x-3 mb-2">
+                <div class="p-2 bg-blue-600 rounded-lg">
+                    <i data-lucide="building" class="w-6 h-6 text-white"></i>
+                </div>
+                <span class="text-xl font-bold tracking-tight">AmbaNotes</span>
+            </div>
+            <h2 class="text-2xl font-bold">Dashboard Login</h2>
+            <p class="text-slate-400 text-sm mt-1">Portal administrasi dan pemantauan sistem</p>
+        </div>
+
+        <!-- Form Login -->
+        <div class="p-8">
+            <!-- Alert Error -->
+            <div id="errorAlert" class="hidden mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded text-red-700 text-sm flex items-start space-x-2">
+                <i data-lucide="alert-circle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
+                <span id="errorMessage">Email atau password salah.</span>
+            </div>
+
+            <form id="loginForm" class="space-y-5">
+                <div>
+                    <label for="email" class="block text-sm font-medium text-slate-700 mb-1.5">Alamat Email</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i data-lucide="mail" class="h-5 w-5 text-slate-400"></i>
+                        </div>
+                        <input type="email" id="email" name="email" required
+                            class="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-colors"
+                            placeholder="nama@organisasi.id">
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-1.5">
+                        <label for="password" class="block text-sm font-medium text-slate-700">Kata Sandi</label>
+                        <a href="javascript:void(0)" onclick="openForgotModal()" class="text-xs font-semibold text-blue-600 hover:text-blue-500 transition-colors">Lupa sandi?</a>
+                    </div>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i data-lucide="lock" class="h-5 w-5 text-slate-400"></i>
+                        </div>
+                        <input type="password" id="password" name="password" required
+                            class="block w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-colors"
+                            placeholder="••••••••">
+                        <button type="button" id="togglePassword" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600">
+                            <i data-lucide="eye" id="eyeIcon" class="h-5 w-5"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex items-center">
+                    <input type="checkbox" id="remember_me" name="remember_me"
+                        class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded">
+                    <label for="remember_me" class="ml-2 block text-sm text-slate-700">Ingat perangkat ini</label>
+                </div>
+
+                <button type="submit" id="submitBtn"
+                    class="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                    <span id="btnText">Masuk Ke Dashboard</span>
+                    <svg id="loadingSpinner" class="hidden animate-spin ml-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </form>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-8 py-4 bg-slate-50 border-t border-slate-200 text-center text-xs text-slate-500">
+            AmbaNotes &copy; 2026. Capstone Project Semester 6.
+        </div>
+    </div>
+
+    <!-- MODAL LUPA PASSWORD (OTP) -->
+    <div id="forgotPasswordModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl border border-slate-200 shadow-2xl overflow-hidden p-6 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-900 text-base">Atur Ulang Kata Sandi</h3>
+                <button onclick="closeForgotModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Alert Modal -->
+            <div id="modalAlert" class="hidden p-3 bg-red-50 border-l-4 border-red-500 rounded text-red-700 text-xs flex items-start space-x-2">
+                <i data-lucide="alert-circle" class="w-4 h-4 flex-shrink-0 mt-0.5"></i>
+                <span id="modalAlertMessage">Eror</span>
+            </div>
+            <div id="modalSuccessAlert" class="hidden p-3 bg-emerald-50 border-l-4 border-emerald-500 rounded text-emerald-800 text-xs flex items-start space-x-2">
+                <i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0 mt-0.5"></i>
+                <span id="modalSuccessMessage">Sukses</span>
+            </div>
+
+            <!-- STEP 1: Minta OTP -->
+            <div id="step-request-otp" class="space-y-4">
+                <p class="text-xs text-slate-500 leading-relaxed">Masukkan email terdaftar Anda. Kami akan mengirimkan kode verifikasi OTP 6-digit untuk mengatur ulang sandi Anda.</p>
+                <div>
+                    <label for="forgot-email" class="block text-xs font-semibold text-slate-700 mb-1">Email Organisasi</label>
+                    <input type="email" id="forgot-email" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="nama@organisasi.id">
+                </div>
+                <button onclick="requestOTP()" id="btn-request-otp" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm py-2 rounded-lg transition-colors flex justify-center items-center">
+                    <span>Kirim Kode OTP</span>
+                </button>
+            </div>
+
+            <!-- STEP 2: Verifikasi & Reset -->
+            <div id="step-reset-password" class="hidden space-y-4">
+                <p class="text-xs text-slate-500 leading-relaxed">Masukkan kode OTP yang dikirim ke email Anda beserta kata sandi baru.</p>
+                <div>
+                    <label for="reset-otp" class="block text-xs font-semibold text-slate-700 mb-1">Kode OTP (6-Digit)</label>
+                    <input type="text" id="reset-otp" maxlength="6" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 tracking-widest text-center font-bold focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="123456">
+                </div>
+                <div>
+                    <label for="reset-new-password" class="block text-xs font-semibold text-slate-700 mb-1">Sandi Baru</label>
+                    <input type="password" id="reset-new-password" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="••••••••">
+                </div>
+                <div>
+                    <label for="reset-confirm-password" class="block text-xs font-semibold text-slate-700 mb-1">Konfirmasi Sandi Baru</label>
+                    <input type="password" id="reset-confirm-password" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="••••••••">
+                </div>
+                <button onclick="resetPassword()" id="btn-reset-password" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm py-2 rounded-lg transition-colors flex justify-center items-center">
+                    <span>Atur Ulang Sandi</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Inisialisasi Ikon Lucide
+        lucide.createIcons();
+
+        // Toggle visibility Password
+        const passwordInput = document.getElementById('password');
+        const togglePasswordBtn = document.getElementById('togglePassword');
+        const eyeIcon = document.getElementById('eyeIcon');
+        let showPassword = false;
+
+        togglePasswordBtn.addEventListener('click', () => {
+            showPassword = !showPassword;
+            passwordInput.type = showPassword ? 'text' : 'password';
+            eyeIcon.setAttribute('data-lucide', showPassword ? 'eye-off' : 'eye');
+            lucide.createIcons();
+        });
+
+        // Form Submit handler
+        const loginForm = document.getElementById('loginForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const btnText = document.getElementById('btnText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const errorAlert = document.getElementById('errorAlert');
+        const errorMessage = document.getElementById('errorMessage');
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // Sembunyikan alert error
+            errorAlert.classList.add('hidden');
+
+            // Jalankan loading spinner
+            submitBtn.disabled = true;
+            btnText.textContent = "Memproses...";
+            loadingSpinner.classList.remove('hidden');
+
+            const email = document.getElementById('email').value;
+            const password = passwordInput.value;
+
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Terjadi kesalahan sistem');
+                }
+
+                // Cek Role
+                const role = data.user.role;
+                if (role !== 'owner' && role !== 'developer') {
+                    // Hapus cookie token yang otomatis terpasang dengan meload endpoint logout
+                    await fetch('/logout');
+                    throw new Error('Akses ditolak. Dashboard hanya dapat diakses oleh Owner dan Developer.');
+                }
+
+                // Redirect berdasarkan role
+                if (role === 'owner') {
+                    window.location.href = '/dashboard';
+                } else if (role === 'developer') {
+                    window.location.href = '/console';
+                }
+
+            } catch (err) {
+                // Tampilkan alert error
+                errorMessage.textContent = err.message;
+                errorAlert.classList.remove('hidden');
+
+                // Reset button state
+                submitBtn.disabled = false;
+                btnText.textContent = "Masuk Ke Dashboard";
+                loadingSpinner.classList.add('hidden');
+            }
+        });
+
+        // MODAL LUPA PASSWORD (OTP) HANDLERS
+        const forgotModal = document.getElementById('forgotPasswordModal');
+        const stepRequest = document.getElementById('step-request-otp');
+        const stepReset = document.getElementById('step-reset-password');
+        const modalAlert = document.getElementById('modalAlert');
+        const modalAlertMsg = document.getElementById('modalAlertMessage');
+        const modalSuccessAlert = document.getElementById('modalSuccessAlert');
+        const modalSuccessMsg = document.getElementById('modalSuccessMessage');
+
+        function openForgotModal() {
+            forgotModal.classList.remove('hidden');
+            stepRequest.classList.remove('hidden');
+            stepReset.classList.add('hidden');
+            modalAlert.classList.add('hidden');
+            modalSuccessAlert.classList.add('hidden');
+            document.getElementById('forgot-email').value = '';
+            document.getElementById('reset-otp').value = '';
+            document.getElementById('reset-new-password').value = '';
+            document.getElementById('reset-confirm-password').value = '';
+            lucide.createIcons();
+        }
+
+        function closeForgotModal() {
+            forgotModal.classList.add('hidden');
+        }
+
+        async function requestOTP() {
+            const email = document.getElementById('forgot-email').value.trim();
+            if (!email) {
+                showModalError('Harap isi alamat email Anda.');
+                return;
+            }
+
+            modalAlert.classList.add('hidden');
+            modalSuccessAlert.classList.add('hidden');
+            const btn = document.getElementById('btn-request-otp');
+            btn.disabled = true;
+            btn.innerHTML = 'Mengirim...';
+
+            try {
+                const response = await fetch('/auth/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Gagal mengirim OTP');
+                }
+
+                showModalSuccess('Kode OTP 6-digit telah dikirim ke email Anda.');
+                stepRequest.classList.add('hidden');
+                stepReset.classList.remove('hidden');
+                lucide.createIcons();
+            } catch (err) {
+                showModalError(err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Kirim Kode OTP';
+            }
+        }
+
+        async function resetPassword() {
+            const email = document.getElementById('forgot-email').value.trim();
+            const otp = document.getElementById('reset-otp').value.trim();
+            const newPassword = document.getElementById('reset-new-password').value;
+            const confirmPassword = document.getElementById('reset-confirm-password').value;
+
+            if (!otp || !newPassword || !confirmPassword) {
+                showModalError('Harap lengkapi semua kolom.');
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                showModalError('Konfirmasi kata sandi tidak cocok.');
+                return;
+            }
+
+            modalAlert.classList.add('hidden');
+            modalSuccessAlert.classList.add('hidden');
+            const btn = document.getElementById('btn-reset-password');
+            btn.disabled = true;
+            btn.innerHTML = 'Memproses...';
+
+            try {
+                const response = await fetch('/auth/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email,
+                        otp,
+                        new_password: newPassword
+                    })
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Gagal mengatur ulang sandi');
+                }
+
+                await Swal.fire({
+                    title: 'Sukses',
+                    text: 'Kata sandi berhasil diatur ulang! Silakan login kembali.',
+                    icon: 'success',
+                    confirmButtonColor: '#2563eb'
+                });
+                closeForgotModal();
+            } catch (err) {
+                showModalError(err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Atur Ulang Sandi';
+            }
+        }
+
+        function showModalError(msg) {
+            modalAlertMsg.textContent = msg;
+            modalAlert.classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function showModalSuccess(msg) {
+            modalSuccessMsg.textContent = msg;
+            modalSuccessAlert.classList.remove('hidden');
+            lucide.createIcons();
+        }
+    </script>
+</body>
+</html>

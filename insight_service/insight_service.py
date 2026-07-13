@@ -74,8 +74,19 @@ def insights(current_user):
         return jsonify(data), 200
     except Exception as e:
         log_event("insight_service", f"Failed to generate insights: {str(e)}",
-                  user_id=user_id, org_id=org_id, action="INSIGHTS_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": str(e)}), 500
+                  user_id=user_id, org_id=org_id, action="INSIGHTS_FAILED", metadata={"error": str(e)}, severity="error")
+        return jsonify({"error": "Failed to generate insights"}), 500
+
+
+def get_next_three_months():
+    months_id = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+    now = datetime.datetime.now()
+    results = []
+    for i in range(1, 4):
+        month_idx = (now.month - 1 + i) % 12
+        year = now.year + (now.month - 1 + i) // 12
+        results.append(f"{months_id[month_idx]} {year}")
+    return results
 
 
 @insight_bp.route("/weekly-summary", methods=["GET"])
@@ -110,14 +121,37 @@ def weekly_summary(current_user):
         new_reminders = reminders_col.count_documents({"org_id": org_id, "created_at": {"$gte": last_week}})
         pending_inv = invitations_col.count_documents({"org_id": org_id, "status": "pending"})
         
-        # 2. Build AI Prompt
+        # 2. Fetch context documents & reminders to make summary specific and contextual
+        recent_docs_cursor = docs_col.find({"org_id": org_id}).sort("uploaded_at", -1).limit(5)
+        recent_docs = []
+        for d in recent_docs_cursor:
+            title = d.get("title") or d.get("filename") or "Dokumen Tanpa Judul"
+            classification = d.get("classification", {}).get("label_name") or d.get("classification", {}).get("label") or "Tidak Terklasifikasi"
+            uploaded_at_str = d.get("uploaded_at").strftime("%d %B %Y") if d.get("uploaded_at") else "-"
+            recent_docs.append(f"- {title} ({classification}), diunggah pada {uploaded_at_str}")
+        
+        recent_reminders_cursor = reminders_col.find({"org_id": org_id}).sort("created_at", -1).limit(5)
+        recent_reminders = []
+        for r in recent_reminders_cursor:
+            task = r.get("task", "Tugas Tanpa Nama")
+            date_str = r.get("date", "-")
+            recent_reminders.append(f"- {task} (Tenggat/Waktu: {date_str})")
+
+        # 3. Build AI Prompt
         prompt = (
             "Anda adalah asisten cerdas AmbaNotes. Tolong buatkan 'Rangkuman Eksekutif Mingguan' yang singkat, "
-            "profesional, dan bersemangat untuk Pimpinan Organisasi (Owner) berdasarkan data minggu ini:\n"
+            "profesional, dan bersemangat untuk Pimpinan Organisasi (Owner) dalam Bahasa Indonesia yang formal.\n\n"
+            f"Statistik Aktivitas Baru Minggu Ini:\n"
             f"- Surat Masuk Baru: {new_docs}\n"
             f"- Jadwal/Tugas Baru: {new_reminders}\n"
             f"- Undangan Member Tertunda: {pending_inv}\n\n"
-            "Gunakan Bahasa Indonesia yang formal. Berikan saran singkat di akhir."
+            "Daftar Surat/Dokumen Terkini di Organisasi:\n" + ("\n".join(recent_docs) if recent_docs else "- Belum ada dokumen") + "\n\n"
+            "Daftar Agenda/Tugas Terkini:\n" + ("\n".join(recent_reminders) if recent_reminders else "- Belum ada tugas") + "\n\n"
+            "Instruksi Pembuatan Ringkasan:\n"
+            "- Tulis ringkasan eksekutif yang bernilai tinggi dan bermakna bagi owner.\n"
+            "- Sebutkan secara spesifik beberapa nama surat/dokumen terkini atau agenda penting jika ada.\n"
+            "- Berikan analisis singkat tentang kesibukan atau fokus utama tim.\n"
+            "- Berikan 1-2 saran strategis/workflow di akhir surat."
         )
         
         try:
@@ -141,8 +175,8 @@ def weekly_summary(current_user):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        log_event("insight_service", f"Weekly summary error: {str(e)}", user_id=user_id, org_id=org_id, action="WEEKLY_SUMMARY_FAILED")
-        return jsonify({"error": str(e)}), 500
+        log_event("insight_service", f"Weekly summary error: {str(e)}", user_id=user_id, org_id=org_id, action="WEEKLY_SUMMARY_FAILED", severity="error")
+        return jsonify({"error": "Failed to generate weekly summary"}), 500
 
 
 @insight_bp.route("/predictive-trends", methods=["GET"])
@@ -183,14 +217,25 @@ def predictive_trends(current_user):
     surat_masuk_count = max(0, docs_count - surat_keluar_count)
     reminders_count = reminders_col.count_documents({"org_id": org_id})
     
+    from common.db import delegations_col
+    delegations_count = delegations_col.count_documents({"org_id": org_id})
+    
+    next_months = get_next_three_months()
+    
     prompt = (
-        "Anda adalah Data Scientist AmbaNotes. Analisis beban kerja organisasi ini.\n"
-        f"Data saat ini: Total Dokumen {docs_count}.\n"
-        "Berdasarkan pola administrasi pemerintahan Indonesia, buatkan prediksi beban kerja "
-        "untuk 3 bulan ke depan (Januari-Desember) dalam format JSON:\n"
+        "Anda adalah Data Scientist AmbaNotes. Analisis beban kerja organisasi ini secara prediktif.\n"
+        f"Data Organisasi Saat Ini:\n"
+        f"- Total Dokumen: {docs_count} (Surat Masuk: {surat_masuk_count}, Surat Keluar: {surat_keluar_count})\n"
+        f"- Total Agenda/Tugas: {reminders_count}\n"
+        f"- Total Divisi/Staf Aktif: {delegations_count}\n\n"
+        f"Berdasarkan pola administrasi organisasi dan hari libur nasional Indonesia, "
+        f"buatkan prediksi beban kerja untuk 3 bulan ke depan secara spesifik: {next_months[0]}, {next_months[1]}, dan {next_months[2]}.\n\n"
+        "Hasilkan output HANYA dalam format JSON valid (tanpa backticks markdown atau penjelasan tambahan):\n"
         "{\n"
         "  \"predictions\": [\n"
-        "    {\"month\": \"...\", \"workload_score\": 0.0 to 1.0, \"reason\": \"...\"}\n"
+        f"    {{\"month\": \"{next_months[0]}\", \"workload_score\": 0.0 to 1.0, \"reason\": \"...\"}},\n"
+        f"    {{\"month\": \"{next_months[1]}\", \"workload_score\": 0.0 to 1.0, \"reason\": \"...\"}},\n"
+        f"    {{\"month\": \"{next_months[2]}\", \"workload_score\": 0.0 to 1.0, \"reason\": \"...\"}}\n"
         "  ],\n"
         "  \"recommendation\": \"...\"\n"
         "}"
@@ -198,16 +243,17 @@ def predictive_trends(current_user):
 
     try:
         content = _call_mistral(prompt)
-        predictions_data = json.loads(re.search(r"\{.*\}", content, re.DOTALL).group())
+        json_match = re.search(r"\{.*\}", content, re.DOTALL)
+        predictions_data = json.loads(json_match.group()) if json_match else {}
         predictions = predictions_data.get("predictions", [])
         recommendation = predictions_data.get("recommendation", "")
     except Exception as gemini_err:
         import traceback
         traceback.print_exc()
         predictions = [
-            {"month": "Bulan Depan", "workload_score": 0.3, "reason": "Pola dasar historis"},
-            {"month": "2 Bulan Depan", "workload_score": 0.4, "reason": "Pola dasar historis"},
-            {"month": "3 Bulan Depan", "workload_score": 0.5, "reason": "Pola dasar historis"}
+            {"month": next_months[0], "workload_score": 0.3, "reason": "Pola dasar historis"},
+            {"month": next_months[1], "workload_score": 0.4, "reason": "Pola dasar historis"},
+            {"month": next_months[2], "workload_score": 0.5, "reason": "Pola dasar historis"}
         ]
         recommendation = "Layanan analisis AI sedang sibuk. Statistik administrasi Anda tetap ditampilkan secara real-time."
 

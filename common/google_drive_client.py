@@ -80,6 +80,77 @@ def get_file_links(file_id, access_token):
         
     return {}
 
+def download_file_from_google_drive(file_id, refresh_token):
+    """
+    Download file binary dari Google Drive menggunakan file_id dan refresh_token.
+    """
+    token_data = refresh_access_token(refresh_token)
+    if not token_data:
+        raise Exception("Gagal mengautentikasi ke Google API. Refresh token tidak valid.")
+
+    access_token = token_data["access_token"]
+
+    url = f"{GOOGLE_DRIVE_FILES_URL}/{file_id}?alt=media"
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=30)
+
+        if response.status_code == 200:
+            return response.content
+
+        log_event(
+            "google_drive_client",
+            f"Gagal download file Google Drive. HTTP {response.status_code}: {response.text}",
+            action="DRIVE_DOWNLOAD_FAILED"
+        )
+        raise Exception(f"Google Drive download failed HTTP {response.status_code}")
+
+    except Exception as e:
+        log_event(
+            "google_drive_client",
+            f"Error download file Google Drive {file_id}: {str(e)}",
+            action="DRIVE_DOWNLOAD_ERROR"
+        )
+        raise
+
+def delete_file_from_google_drive(file_id, refresh_token):
+    """
+    Menghapus file dari Google Drive menggunakan file_id dan refresh_token.
+    """
+    token_data = refresh_access_token(refresh_token)
+    if not token_data:
+        raise Exception("Gagal mengautentikasi ke Google API. Refresh token tidak valid.")
+
+    access_token = token_data["access_token"]
+
+    url = f"{GOOGLE_DRIVE_FILES_URL}/{file_id}"
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+
+    try:
+        response = requests.delete(url, headers=headers, timeout=30)
+
+        if response.status_code in [200, 204]:
+            return True
+
+        log_event(
+            "google_drive_client",
+            f"Gagal hapus file Google Drive. HTTP {response.status_code}: {response.text}",
+            action="DRIVE_DELETE_FAILED"
+        )
+        return False
+
+    except Exception as e:
+        log_event(
+            "google_drive_client",
+            f"Error hapus file Google Drive {file_id}: {str(e)}",
+            action="DRIVE_DELETE_ERROR"
+        )
+        return False
 
 def upload_file_to_google_drive(file_stream, filename, mimetype, refresh_token):
     """

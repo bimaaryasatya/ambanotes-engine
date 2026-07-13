@@ -7,10 +7,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Blueprint, request, jsonify
 import requests
+from datetime import datetime
 from common.config import Config
 from common.logger import log_event
 from common.jwt_utils import token_required
-from common.db import docs_col, reminders_col
+from common.db import docs_col, reminders_col, chats_col
 def _call_mistral(prompt, system_instruction=None, history=None):
     messages = []
     if system_instruction:
@@ -35,6 +36,37 @@ def _call_mistral(prompt, system_instruction=None, history=None):
     )
     response.raise_for_status()
     return response.json()['choices'][0]['message']['content']
+
+
+def _get_user_docs_query(current_user):
+    org_id = current_user.get("org_id")
+    role = current_user.get("role", "member")
+    user_id = current_user.get("user_id")
+    delegation_id = current_user.get("delegation_id") or None
+
+    if role == 'owner':
+        return {"org_id": org_id}
+    
+    is_general = not delegation_id or delegation_id == "general"
+    if is_general:
+        return {
+            "org_id": org_id,
+            "$or": [
+                {"delegation_id": "general"},
+                {"delegation_id": None},
+                {"delegation_id": {"$exists": False}},
+                {"uploaded_by": user_id},
+            ]
+        }
+    else:
+        return {
+            "org_id": org_id,
+            "$or": [
+                {"delegation_id": delegation_id},
+                {"uploaded_by": user_id},
+            ]
+        }
+
 
 ai_bp = Blueprint('ai', __name__)
 
@@ -102,8 +134,8 @@ def summarize(current_user):
 
     except Exception as e:
         log_event("ai_service", f"Summarization error: {str(e)}",
-                  user_id=user_id, org_id=org_id, action="AI_SUMMARIZE_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": str(e)}), 500
+                  user_id=user_id, org_id=org_id, action="AI_SUMMARIZE_FAILED", metadata={"error": str(e)}, severity="error")
+        return jsonify({"error": "Failed to summarize text"}), 500
 
 
 @ai_bp.route("/chat", methods=["POST"])
@@ -141,6 +173,14 @@ def chat(current_user):
             context:
               type: string
               example: "Isi teks surat sebagai konteks..."
+            doc_id:
+              type: string
+              example: "doc-uuid-here"
+            history:
+              type: array
+              items:
+                type: object
+              example: [{"sender": "user", "content": "hello"}]
     responses:
       200:
         description: Chat response generated
@@ -158,19 +198,218 @@ def chat(current_user):
         data = request.get_json(force=True, silent=True) or {}
         user_message = data.get("message", "")
         context = data.get("context", "")
-        history = data.get("history", [])
+        history = data.get("history", []) or []
+        doc_id = data.get("doc_id")
+
+        if doc_id and not history:
+            existing_chat = chats_col.find_one({"user_id": user_id, "doc_id": doc_id})
+            if existing_chat:
+                history = existing_chat.get("chat_json", [])
 
         system_instruction = f"Anda adalah asisten cerdas AmbaNotes. Gunakan konteks dokumen berikut untuk menjawab: {context}" if context else "Anda adalah asisten cerdas AmbaNotes."
         answer = _call_mistral(user_message, system_instruction=system_instruction, history=history)
 
-        log_event("ai_service", "Chat response generated",
-                  user_id=user_id, org_id=org_id, action="AI_CHAT_SUCCESS")
-        return jsonify({"answer": answer}), 200
+        updated_history = list(history) + [
+            {"sender": "user", "content": user_message},
+            {"sender": "assistant", "content": answer}
+        ]
+
+        if doc_id:
+            chats_col.update_one(
+                {"user_id": user_id, "doc_id": doc_id},
+                {"$set": {
+                    "chat_json": updated_history,
+                    "updated_at": datetime.utcnow()
+                }},
+                upsert=True
+            )
+
+        log_event("ai_service", "Bertanya ke Asisten Amba AI terkait berkas",
+                  user_id=user_id, org_id=org_id, action="AI_CHAT_SUCCESS",
+                  audience="owner" if current_user.get("role") == "owner" else "user",
+                  visibility="app",
+                  severity="info")
+        return jsonify({"answer": answer, "history": updated_history}), 200
 
     except Exception as e:
         log_event("ai_service", f"Chat error: {str(e)}",
-                  user_id=user_id, org_id=org_id, action="AI_CHAT_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": str(e)}), 500
+                  user_id=user_id, org_id=org_id, action="AI_CHAT_FAILED", metadata={"error": str(e)}, severity="error")
+        return jsonify({"error": "Failed to generate chat response"}), 500
+
+
+@ai_bp.route("/chats", methods=["GET"])
+@token_required
+def list_chats(current_user):
+    """
+    List Chat Histories for the User
+    ---
+    tags:
+      - AI
+    produces:
+      - application/json
+    security:
+      - BearerAuth: []
+    responses:
+      200:
+        description: List of user chat sessions
+      401:
+        description: Unauthorized
+      500:
+        description: Database or processing error
+    """
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+    log_event("ai_service", f"List chats request from: {current_user.get('username')}",
+              user_id=user_id, org_id=org_id, action="AI_LIST_CHATS_START")
+    try:
+        chats = list(chats_col.find({"user_id": user_id}).sort("updated_at", -1))
+        result = []
+        for chat in chats:
+            doc_id = chat.get("doc_id")
+            filename = "Unknown Document"
+            if doc_id:
+                doc = docs_col.find_one({"doc_id": doc_id})
+                if doc:
+                    filename = doc.get("filename", filename)
+            result.append({
+                "doc_id": doc_id,
+                "filename": filename,
+                "chat_json": chat.get("chat_json", []),
+                "updated_at": chat.get("updated_at").isoformat() if chat.get("updated_at") else None
+            })
+        log_event("ai_service", "List chats success", user_id=user_id, org_id=org_id, action="AI_LIST_CHATS_SUCCESS")
+        return jsonify(result), 200
+    except Exception as e:
+        log_event("ai_service", f"List chats error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_LIST_CHATS_FAILED")
+        return jsonify({"error": "An internal error has occurred."}), 500
+
+
+@ai_bp.route("/chat/<doc_id>", methods=["GET"])
+@token_required
+def get_chat_detail(current_user, doc_id):
+    """
+    Get Chat History for a Specific Document
+    ---
+    tags:
+      - AI
+    produces:
+      - application/json
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: doc_id
+        in: path
+        type: string
+        required: true
+        description: "The document ID of the chat"
+    responses:
+      200:
+        description: Chat history retrieved successfully
+      401:
+        description: Unauthorized
+      500:
+        description: Database or processing error
+    """
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+    log_event("ai_service", f"Get chat detail request for doc_id: {doc_id} from: {current_user.get('username')}",
+              user_id=user_id, org_id=org_id, action="AI_GET_CHAT_DETAIL_START")
+    try:
+        chat = chats_col.find_one({"user_id": user_id, "doc_id": doc_id})
+        if not chat:
+            return jsonify({"chat_json": [], "message": "No chat history found for this document"}), 200
+
+        filename = "Unknown Document"
+        doc = docs_col.find_one({"doc_id": doc_id})
+        if doc:
+            filename = doc.get("filename", filename)
+
+        result = {
+            "doc_id": doc_id,
+            "filename": filename,
+            "chat_json": chat.get("chat_json", []),
+            "updated_at": chat.get("updated_at").isoformat() if chat.get("updated_at") else None
+        }
+        log_event("ai_service", "Get chat detail success", user_id=user_id, org_id=org_id, action="AI_GET_CHAT_DETAIL_SUCCESS")
+        return jsonify(result), 200
+    except Exception as e:
+        log_event("ai_service", f"Get chat detail error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_GET_CHAT_DETAIL_FAILED")
+        return jsonify({"error": "An internal error occurred"}), 500
+
+
+@ai_bp.route("/chat/<doc_id>", methods=["DELETE"])
+@token_required
+def delete_chat_detail(current_user, doc_id):
+    """
+    Delete Chat History for a Specific Document
+    ---
+    tags:
+      - AI
+    produces:
+      - application/json
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: doc_id
+        in: path
+        type: string
+        required: true
+        description: "The document ID of the chat to delete"
+    responses:
+      200:
+        description: Chat history deleted successfully
+      404:
+        description: Chat history not found
+    """
+    user_id = current_user.get("user_id")
+    org_id = current_user.get("org_id")
+
+    log_event(
+        "ai_service",
+        f"Delete chat request for doc_id: {doc_id} from: {current_user.get('username')}",
+        user_id=user_id,
+        org_id=org_id,
+        action="AI_DELETE_CHAT_START",
+        metadata={"doc_id": doc_id},
+    )
+
+    try:
+        result = chats_col.delete_one({"user_id": user_id, "doc_id": doc_id})
+
+        if result.deleted_count == 0:
+            log_event(
+                "ai_service",
+                f"Chat history not found for delete: {doc_id}",
+                user_id=user_id,
+                org_id=org_id,
+                action="AI_DELETE_CHAT_NOT_FOUND",
+                metadata={"doc_id": doc_id},
+            )
+            return jsonify({"error": "Chat history not found"}), 404
+
+        log_event(
+            "ai_service",
+            f"Chat history deleted for doc_id: {doc_id}",
+            user_id=user_id,
+            org_id=org_id,
+            action="AI_DELETE_CHAT_SUCCESS",
+            metadata={"doc_id": doc_id},
+            audience="owner" if current_user.get("role") == "owner" else "user",
+            visibility="app",
+            severity="info",
+        )
+        return jsonify({"message": "Chat history deleted"}), 200
+    except Exception as e:
+        log_event(
+            "ai_service",
+            f"Delete chat error: {str(e)}",
+            user_id=user_id,
+            org_id=org_id,
+            action="AI_DELETE_CHAT_FAILED",
+            metadata={"doc_id": doc_id, "error": str(e)},
+        )
+        return jsonify({"error": "An internal error occurred"}), 500
+
 
 
 @ai_bp.route("/chat-global", methods=["POST"])
@@ -228,8 +467,9 @@ def chat_global(current_user):
         if not user_message:
             return jsonify({"error": "Message is required"}), 400
 
-        # Fetch all documents for this organization
-        docs = list(docs_col.find({"org_id": org_id}))
+        # Fetch only documents that this user is authorized to see
+        query = _get_user_docs_query(current_user)
+        docs = list(docs_col.find(query))
         
         if not docs:
             return jsonify({
@@ -281,9 +521,12 @@ def chat_global(current_user):
                     })
                     seen_ids.add(cid)
 
-        log_event("ai_service", "Global Chat response with citations generated",
+        log_event("ai_service", "Bertanya ke Asisten Amba AI (Global)",
                   user_id=user_id, org_id=org_id, action="AI_CHAT_GLOBAL_SUCCESS", 
-                  metadata={"ref_count": len(references)})
+                  metadata={"ref_count": len(references)},
+                  audience="owner" if current_user.get("role") == "owner" else "user",
+                  visibility="app",
+                  severity="info")
         
         return jsonify({
             "answer": answer,
@@ -292,8 +535,8 @@ def chat_global(current_user):
 
     except Exception as e:
         log_event("ai_service", f"Global Chat error: {str(e)}",
-                  user_id=user_id, org_id=org_id, action="AI_CHAT_GLOBAL_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": str(e)}), 500
+                  user_id=user_id, org_id=org_id, action="AI_CHAT_GLOBAL_FAILED", metadata={"error": str(e)}, severity="error")
+        return jsonify({"error": "Failed to generate global chat response"}), 500
 
 
 @ai_bp.route("/extract-tasks", methods=["POST"])
@@ -379,8 +622,8 @@ def extract_tasks(current_user):
         return jsonify(tasks), 200
 
     except Exception as e:
-        log_event("ai_service", f"Task extraction error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_EXTRACT_TASKS_FAILED")
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Task extraction error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_EXTRACT_TASKS_FAILED", severity="error")
+        return jsonify({"error": "Failed to extract tasks"}), 500
 
 
 @ai_bp.route("/generate-reply", methods=["POST"])
@@ -468,8 +711,8 @@ def generate_reply(current_user):
         return jsonify(replies), 200
 
     except Exception as e:
-        log_event("ai_service", f"Reply generation error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_GENERATE_REPLY_FAILED")
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Reply generation error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_GENERATE_REPLY_FAILED", severity="error")
+        return jsonify({"error": "Failed to generate reply drafts"}), 500
 
 
 @ai_bp.route("/translate", methods=["POST"])
@@ -535,8 +778,8 @@ def translate_text(current_user):
         return jsonify({"translated_text": translated}), 200
 
     except Exception as e:
-        log_event("ai_service", f"Translation error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_TRANSLATE_FAILED")
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Translation error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_TRANSLATE_FAILED", severity="error")
+        return jsonify({"error": "Failed to translate text"}), 500
 
 
 @ai_bp.route("/suggest-disposition", methods=["POST"])
@@ -627,7 +870,8 @@ def suggest_disposition(current_user):
         return jsonify(suggestion), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Disposition suggestion error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_SUGGEST_DISPOSITION_FAILED", severity="error")
+        return jsonify({"error": "Failed to generate disposition suggestion"}), 500
 
 
 @ai_bp.route("/redact-sensitive", methods=["POST"])
@@ -694,7 +938,8 @@ def redact_sensitive(current_user):
         return jsonify({"redacted_text": redacted}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Sensitive data redaction error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_REDACT_FAILED", severity="error")
+        return jsonify({"error": "Failed to redact sensitive data"}), 500
 
 
 @ai_bp.route("/semantic-search", methods=["POST"])
@@ -748,8 +993,9 @@ def semantic_search(current_user):
         if not query:
             return jsonify({"error": "Query is required"}), 400
 
-        # Fetch titles and snippets for all organization docs
-        docs = list(docs_col.find({"org_id": org_id}, {"doc_id": 1, "filename": 1, "content": 1}))
+        # Fetch titles and snippets for authorized docs only
+        query_filter = _get_user_docs_query(current_user)
+        docs = list(docs_col.find(query_filter, {"doc_id": 1, "filename": 1, "content": 1}))
         if not docs:
             return jsonify([]), 200
 
@@ -795,7 +1041,8 @@ def semantic_search(current_user):
         return jsonify(results), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Semantic search error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_SEMANTIC_SEARCH_FAILED", severity="error")
+        return jsonify({"error": "Failed to perform semantic search"}), 500
 
 
 @ai_bp.route("/voice-intent", methods=["POST"])
@@ -878,7 +1125,8 @@ def voice_intent(current_user):
         return jsonify(intent_data), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Voice intent extraction error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_VOICE_INTENT_FAILED", severity="error")
+        return jsonify({"error": "Failed to extract voice intent"}), 500
 
 
 @ai_bp.route("/analyze-workflow", methods=["POST"])
@@ -952,7 +1200,8 @@ def analyze_workflow(current_user):
 
         return jsonify(analysis), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Workflow analysis error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_WORKFLOW_ANALYSIS_FAILED", severity="error")
+        return jsonify({"error": "Failed to analyze workflow"}), 500
 
 
 @ai_bp.route("/extract-budget", methods=["POST"])
@@ -1023,7 +1272,8 @@ def extract_budget(current_user):
 
         return jsonify(budget_data), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Budget extraction error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_EXTRACT_BUDGET_FAILED", severity="error")
+        return jsonify({"error": "Failed to extract budget data"}), 500
 
 
 @ai_bp.route("/analyze-priority", methods=["POST"])
@@ -1093,4 +1343,5 @@ def analyze_priority(current_user):
         log_event("ai_service", "Priority analysis completed", user_id=user_id, org_id=org_id, action="AI_PRIORITY_SUCCESS")
         return jsonify(analysis), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log_event("ai_service", f"Priority analysis error: {str(e)}", user_id=user_id, org_id=org_id, action="AI_PRIORITY_FAILED", severity="error")
+        return jsonify({"error": "Failed to analyze document priority"}), 500

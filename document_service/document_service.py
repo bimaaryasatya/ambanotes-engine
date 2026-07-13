@@ -1,10 +1,11 @@
 import os
 import sys
+import re
 
 # Add parent directory to path so we can import from common
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from common.logger import log_event
 from common.jwt_utils import token_required, role_required
 
@@ -15,7 +16,11 @@ import uuid
 import datetime
 import base64
 from io import BytesIO
-from common.google_drive_client import upload_file_to_google_drive
+from common.google_drive_client import (
+    upload_file_to_google_drive,
+    download_file_from_google_drive,
+    delete_file_from_google_drive
+)
 
 from common.config import Config
 
@@ -29,9 +34,10 @@ def _get_auth_header():
     return {"Authorization": request.headers.get("Authorization", "")}
 
 
-def process_ai_pipeline(text):
+def process_ai_pipeline(text, headers=None):
     """Fungsi helper untuk menjalankan Klasifikasi dan NER (meneruskan token auth)."""
-    headers = _get_auth_header()
+    if headers is None:
+        headers = _get_auth_header()
     try:
         class_res = requests.post(f"{GATEWAY_URL}/classification/predict", json={"text": text}, headers=headers)
         classification = class_res.json() if class_res.status_code == 200 else {"label": "Unknown"}
@@ -43,6 +49,77 @@ def process_ai_pipeline(text):
     except Exception as e:
         log_event("document_service", f"AI Pipeline error: {str(e)}", action="AI_PIPELINE_ERROR", metadata={"error": str(e)})
         return {"label": "Error"}, {}
+
+
+_delegation_cache = {}
+
+def _get_delegation_name_cached(delegation_id, org_id):
+    if not delegation_id or delegation_id == "general":
+        return "General"
+    cache_key = f"{org_id}:{delegation_id}"
+    if cache_key not in _delegation_cache:
+        delegation = None
+        try:
+            delegation = delegations_col.find_one({"_id": ObjectId(delegation_id), "org_id": org_id})
+        except Exception:
+            delegation = delegations_col.find_one({"_id": delegation_id, "org_id": org_id})
+        _delegation_cache[cache_key] = delegation.get("name") if delegation else "General"
+    return _delegation_cache[cache_key]
+
+def _serialize_doc(doc):
+    doc.pop("_id", None)
+    delegation_id = doc.get("delegation_id") or "general"
+    doc["delegation_id"] = delegation_id
+    doc["delegation_name"] = _get_delegation_name_cached(delegation_id, doc.get("org_id"))
+    if not doc.get("title"):
+        doc["title"] = doc.get("filename")
+    return doc
+
+
+def generate_document_title(extracted_text, filename):
+    """
+    Menghasilkan judul pendek (3-6 kata) berdasarkan isi surat untuk nama card surat.
+    """
+    if not extracted_text or not extracted_text.strip():
+        return os.path.splitext(filename)[0]
+
+    prompt = (
+        "Tugas Anda: Buatlah satu judul/nama singkat yang sangat jelas dan formal (maksimal 5 kata) "
+        "untuk dokumen/surat berdasarkan teks hasil OCR berikut ini. Judul ini akan digunakan sebagai nama card surat di aplikasi.\n"
+        "Aturan:\n"
+        "1. JANGAN gunakan tanda kutip, emoji, kata 'Judul:', atau penjelasan tambahan.\n"
+        "2. Ambil inti perihal surat tersebut (misal: 'Undangan Rapat Koordinasi', 'Surat Perjanjian Kerja', 'Pengumuman Libur Bersama').\n"
+        "3. Berikan langsung judulnya.\n\n"
+        f"Teks Surat:\n{extracted_text}"
+    )
+
+    try:
+        api_key = Config.MISTRAL_API_KEY
+        if not api_key:
+            return os.path.splitext(filename)[0]
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": "mistral-small-latest",
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.3
+        }
+
+        response = requests.post("https://api.mistral.ai/v1/chat/completions", json=payload, headers=headers, timeout=5)
+        if response.status_code == 200:
+            title = response.json()["choices"][0]["message"]["content"].strip()
+            title = re.sub(r'^["\'`*:]+|["\'`*:]+$', '', title).strip()
+            return title
+    except Exception as e:
+        log_event("document_service", f"Gagal generate title via Mistral: {str(e)}", action="MISTRAL_TITLE_ERROR")
+
+    return os.path.splitext(filename)[0]
 
 
 def generate_security_suggestion(doc_data):
@@ -145,165 +222,228 @@ def upload_document(current_user):
 
     file = request.files['file']
 
+    filename = file.filename
+    mimetype = file.mimetype
     try:
-        files = {'file': (file.filename, file.stream, file.mimetype)}
-        ocr_res = requests.post(f"{GATEWAY_URL}/ocr/extract-text", files=files, headers=_get_auth_header())
-        ocr_res.raise_for_status()
-        extracted_text = ocr_res.json().get("text", "")
+        file_bytes = file.read()
     except Exception as e:
-        log_event("document_service", f"OCR request failed: {str(e)}", 
-                  user_id=user_id, org_id=org_id, action="DOC_OCR_FAILED", metadata={"error": str(e)})
-        return jsonify({"error": f"OCR failed: {str(e)}"}), 500
-
-    classification, entities = process_ai_pipeline(extracted_text)
-
-    # Reset stream pointer setelah dibaca oleh request POST OCR agar bisa dibaca ulang
-    file.stream.seek(0)
-
-    # 1. Periksa koneksi Google Drive
-    user_data = users_col.find_one({"_id": ObjectId(user_id)})
-    google_drive_data = None
-    file_data_b64 = None
-
-    google_drive_connected = user_data.get("google_drive_connected", False) if user_data else False
-
-    if google_drive_connected:
-        refresh_token = user_data.get("google_oauth", {}).get("refresh_token")
-        if refresh_token:
-            try:
-                # Upload file fisik asli ke Google Drive user
-                google_drive_data = upload_file_to_google_drive(
-                    file_stream=file.stream,
-                    filename=file.filename,
-                    mimetype=file.mimetype,
-                    refresh_token=refresh_token
-                )
-                log_event("document_service", f"Successfully uploaded file {file.filename} to user's Google Drive", 
-                          user_id=user_id, org_id=org_id, action="DOC_DRIVE_UPLOAD_SUCCESS")
-            except Exception as drive_err:
-                log_event("document_service", f"Failed to upload to Google Drive: {str(drive_err)}, falling back to local Base64", 
-                          user_id=user_id, org_id=org_id, action="DOC_DRIVE_UPLOAD_FAILED")
-                # Fallback ke penyimpanan lokal/Base64 di MongoDB jika Drive upload gagal
-                file.stream.seek(0)
-                file_data_b64 = base64.b64encode(file.stream.read()).decode("utf-8")
-        else:
-            # Fallback ke penyimpanan lokal/Base64 jika refresh token tidak tersedia
-            file_data_b64 = base64.b64encode(file.stream.read()).decode("utf-8")
-    else:
-        # Google Drive belum terhubung: simpan file asli sebagai Base64 di MongoDB
-        file_data_b64 = base64.b64encode(file.stream.read()).decode("utf-8")
+        return jsonify({"error": f"Failed to read file: {str(e)}"}), 400
 
     doc_id = uuid.uuid4().hex
+    
+    # 1. Create a placeholder document with "processing" status
     doc_data = {
         "doc_id": doc_id,
-        "filename": file.filename,
-        "content": extracted_text,
-        "classification": classification,
-        "entities": entities,
+        "filename": filename,
+        "title": os.path.splitext(filename)[0],
+        "content": "Dokumen sedang diproses di server oleh pipeline AI...",
+        "classification": {"label": "Processing", "label_name": "Processing"},
+        "entities": {},
         "uploaded_at": datetime.datetime.utcnow(),
         "uploaded_by": user_id,
         "org_id": org_id,
-        "google_drive": google_drive_data,
-        "mimetype": file.mimetype,
-        "status": "processed"
+        "delegation_id": "general",
+        "google_drive": None,
+        "mimetype": mimetype,
+        "status": "processing"
     }
 
-    if file_data_b64:
-        doc_data["file_data"] = file_data_b64
-
     docs_col.insert_one(doc_data)
-    doc_data.pop('_id', None)
+    
+    response_data = dict(doc_data)
+    response_data.pop("_id", None)
+    response_data["delegation_name"] = "General"
+    response_data["security_suggestion"] = "Dokumen Anda sedang diproses oleh AI..."
 
-    # 2. Hasilkan saran keamanan dinamis dengan Mistral AI jika belum terhubung
-    if not google_drive_data:
-        doc_data["security_suggestion"] = generate_security_suggestion(doc_data)
-    else:
-        doc_data["security_suggestion"] = None
+    auth_header = _get_auth_header()
 
-    log_event("document_service", f"File processed and saved: {file.filename}", 
-              user_id=user_id, org_id=org_id, action="DOC_UPLOAD_SUCCESS", 
-              metadata={"doc_id": doc_id, "filename": file.filename})
-              
-    return jsonify(doc_data), 201
+    # 2. Run the pipeline asynchronously in a background thread
+    import threading
+
+    def process_document_async():
+        try:
+            try:
+                # Run OCR
+                files_payload = {'file': (filename, BytesIO(file_bytes), mimetype)}
+                ocr_res = requests.post(f"{GATEWAY_URL}/ocr/extract-text", files=files_payload, headers=auth_header)
+                ocr_res.raise_for_status()
+                extracted_text = ocr_res.json().get("text", "")
+            except Exception as e:
+                log_event("document_service", f"Async OCR failed for {doc_id}: {str(e)}", 
+                          user_id=user_id, org_id=org_id, action="DOC_OCR_FAILED", metadata={"error": str(e)}, severity="error")
+                docs_col.update_one(
+                    {"doc_id": doc_id, "org_id": org_id},
+                    {"$set": {"status": "error", "content": f"Gagal menjalankan OCR pada berkas: {str(e)}"}}
+                )
+                return
+
+            # Run AI pipeline
+            classification, entities = process_ai_pipeline(extracted_text, headers=auth_header)
+
+            # Google Drive / Base64 upload
+            google_drive_data = None
+            file_data_b64 = None
+
+            owner = users_col.find_one({
+                "org_id": org_id,
+                "role": "owner",
+                "google_drive_connected": True
+            })
+
+            if owner:
+                refresh_token = owner.get("google_oauth", {}).get("refresh_token")
+                if refresh_token:
+                    try:
+                        google_drive_data = upload_file_to_google_drive(
+                            file_stream=BytesIO(file_bytes),
+                            filename=filename,
+                            mimetype=mimetype,
+                            refresh_token=refresh_token
+                        )
+                        log_event(
+                            "document_service",
+                            f"Async uploaded file {filename} to organization owner's Google Drive",
+                            user_id=user_id,
+                            org_id=org_id,
+                            action="DOC_DRIVE_UPLOAD_SUCCESS"
+                        )
+                    except Exception as drive_err:
+                        log_event(
+                            "document_service",
+                            f"Failed async upload to owner's Google Drive: {str(drive_err)}, falling back to local Base64",
+                            user_id=user_id,
+                            org_id=org_id,
+                            action="DOC_DRIVE_UPLOAD_FAILED"
+                        )
+                        file_data_b64 = base64.b64encode(file_bytes).decode("utf-8")
+                else:
+                    file_data_b64 = base64.b64encode(file_bytes).decode("utf-8")
+            else:
+                file_data_b64 = base64.b64encode(file_bytes).decode("utf-8")
+
+            title = generate_document_title(extracted_text, filename)
+            
+            update_doc = {
+                "title": title,
+                "content": extracted_text,
+                "classification": classification,
+                "entities": entities,
+                "google_drive": google_drive_data,
+                "status": "processed"
+            }
+
+            if file_data_b64:
+                update_doc["file_data"] = file_data_b64
+
+            if not google_drive_data:
+                temp_doc_for_suggestion = {
+                    "classification": classification,
+                    "entities": entities
+                }
+                update_doc["security_suggestion"] = generate_security_suggestion(temp_doc_for_suggestion)
+            else:
+                update_doc["security_suggestion"] = None
+
+            docs_col.update_one({"doc_id": doc_id, "org_id": org_id}, {"$set": update_doc})
+
+            print(f"[ASYNC] Document {doc_id} ({filename}) processed successfully — status: processed")
+            log_event("document_service", f"Async file processed and saved: {filename}", 
+                      user_id=user_id, org_id=org_id, action="DOC_UPLOAD_SUCCESS", 
+                      metadata={"doc_id": doc_id, "filename": filename},
+                      audience="owner" if current_user.get("role") == "owner" else "user",
+                      visibility="app",
+                      severity="info")
+        except Exception as e:
+            print(f"[ASYNC] FATAL ERROR processing document {doc_id}: {e}")
+            log_event("document_service", f"Async processing fatally failed for {doc_id}: {str(e)}", 
+                      user_id=user_id, org_id=org_id, action="DOC_ASYNC_FATAL", metadata={"error": str(e)}, severity="error")
+            try:
+                docs_col.update_one(
+                    {"doc_id": doc_id, "org_id": org_id},
+                    {"$set": {"status": "error", "content": f"Gagal memproses dokumen: {str(e)}"}}
+                )
+            except Exception:
+                pass
+
+    thread = threading.Thread(target=process_document_async)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify(response_data), 201
 
 
 @document_bp.route('/list', methods=['GET'])
 @token_required
 def list_documents(current_user):
-    """
-    List all processed documents (filtered by organization and delegation for members)
-    """
     org_id = current_user.get("org_id")
     role = current_user.get("role", "member")
     user_id = current_user.get("user_id")
 
-    print(f"[DEBUG LIST_DOCS] --- INCOMING REQUEST ---")
-    print(f"[DEBUG LIST_DOCS] User ID (JWT): {user_id}")
-    print(f"[DEBUG LIST_DOCS] Role (JWT): {role}")
-    print(f"[DEBUG LIST_DOCS] Org ID (JWT): {org_id}")
+    delegation_id = current_user.get("delegation_id") or None
 
-    # For safety/reliability, always fetch latest user status from DB
-    user = None
-    if user_id:
-        try:
-            user = users_col.find_one({"_id": ObjectId(user_id)})
-        except Exception as e:
-            print(f"[DEBUG LIST_DOCS] ObjectId parse error for user_id {user_id}: {e}")
-        if not user:
-            user = users_col.find_one({"_id": user_id})
-
-    delegation_id = None
-    if user:
-        delegation_id = user.get("delegation_id")
-        print(f"[DEBUG LIST_DOCS] Found user in DB: {user.get('username')}, delegation_id: {delegation_id}")
-    else:
-        print(f"[DEBUG LIST_DOCS] WARNING: User not found in DB for user_id: {user_id}")
+    projection = {
+        "_id": 0,
+        "doc_id": 1,
+        "filename": 1,
+        "title": 1,
+        "content": 1,
+        "classification": 1,
+        "entities": 1,
+        "uploaded_at": 1,
+        "uploaded_by": 1,
+        "org_id": 1,
+        "delegation_id": 1,
+        "mimetype": 1,
+        "status": 1,
+        "google_drive": 1,
+    }
 
     if role == 'owner':
-        docs = list(docs_col.find({"org_id": org_id}))
-        print(f"[DEBUG LIST_DOCS] Owner request. Found {len(docs)} documents for org_id: {org_id}")
+        docs = list(docs_col.find({"org_id": org_id}, projection))
     else:
-        # A member is general if delegation_id is None, "", or "general"
-        is_general = (delegation_id is None or delegation_id == "" or delegation_id == "general")
+        is_general = not delegation_id or delegation_id == "general"
         if is_general:
             query = {
                 "org_id": org_id,
-                "delegation_id": "general"
+                "$or": [
+                    {"delegation_id": "general"},
+                    {"delegation_id": None},
+                    {"delegation_id": {"$exists": False}},
+                    {"uploaded_by": user_id},
+                ]
             }
-            docs = list(docs_col.find(query))
-            print(f"[DEBUG LIST_DOCS] Member is in General division. Found {len(docs)} general documents.")
         else:
             query = {
                 "org_id": org_id,
                 "$or": [
                     {"delegation_id": delegation_id},
-                    {"delegation_id": str(delegation_id)}
+                    {"uploaded_by": user_id},
                 ]
             }
-            docs = list(docs_col.find(query))
-            
-            # Print delegation name for debug visibility
-            try:
-                del_obj = delegations_col.find_one({"_id": ObjectId(delegation_id)})
-            except Exception:
-                del_obj = delegations_col.find_one({"_id": delegation_id})
-            del_name = del_obj.get("name") if del_obj else "Unknown"
-            
-            print(f"[DEBUG LIST_DOCS] Member request for division '{del_name}' (ID: {delegation_id}). Found {len(docs)} documents.")
-            
-            for d in docs:
-                print(f"  -> Doc ID: {d.get('doc_id')}, Title: '{d.get('title')}', delegation_id: {d.get('delegation_id')}")
+        docs = list(docs_col.find(query, projection))
 
-    for doc in docs:
-        doc.pop('_id', None)
-        
-    log_event("document_service", f"Listed docs for org: {org_id}, role: {role}", 
+    # Prefetch all delegations for this organization to avoid N+1 queries
+    try:
+        delegations = list(delegations_col.find({"org_id": org_id}))
+        _delegation_cache.clear()
+        for d in delegations:
+            d_id = d["_id"]
+            d_name = d.get("name")
+            _delegation_cache[f"{org_id}:{d_id}"] = d_name
+            _delegation_cache[f"{org_id}:{str(d_id)}"] = d_name
+    except Exception as e:
+        log_event("document_service", f"Failed to prefetch delegations: {str(e)}", severity="warning")
+        _delegation_cache.clear()
+
+    docs = [_serialize_doc(doc) for doc in docs]
+
+    log_event("document_service", f"Listed docs for org: {org_id}, role: {role}",
               user_id=user_id, org_id=org_id, action="DOC_LIST_VIEW")
-              
+
     return jsonify(docs), 200
 
 
-@document_bp.route('/disposition/<doc_id>', methods=['POST'])
+@document_bp.route('/disposition/<path:doc_id>', methods=['POST'])
 @token_required
 @role_required('owner')
 def disposition_document(current_user, doc_id):
@@ -318,6 +458,10 @@ def disposition_document(current_user, doc_id):
         return jsonify({"error": "Delegation ID is required"}), 400
 
     try:
+        # Fetch document title first for logging
+        doc = docs_col.find_one({"doc_id": doc_id, "org_id": org_id})
+        doc_title = doc.get("title", doc.get("filename", "Dokumen")) if doc else "Dokumen"
+
         # Check if disposition target is general
         if delegation_id == 'general':
             result = docs_col.update_one(
@@ -326,8 +470,17 @@ def disposition_document(current_user, doc_id):
             )
             if result.matched_count == 0:
                 return jsonify({"error": "Document not found"}), 404
-            log_event("document_service", f"Document {doc_id} dispositioned to general",
-                      user_id=current_user.get("user_id"), org_id=org_id, action="DOC_DISPOSITION_SUCCESS")
+            
+            log_event(
+                "document_service",
+                f"Mendisposisikan berkas '{doc_title}' ke Umum (General)",
+                user_id=current_user.get("user_id"),
+                org_id=org_id,
+                action="DOC_DISPOSITION_SUCCESS",
+                audience="owner",
+                visibility="app",
+                severity="info"
+            )
             return jsonify({"message": "Document successfully dispositioned to General"}), 200
 
         # Verify delegation exists in this organization
@@ -346,15 +499,25 @@ def disposition_document(current_user, doc_id):
         if result.matched_count == 0:
             return jsonify({"error": "Document not found"}), 404
 
-        log_event("document_service", f"Document {doc_id} dispositioned to delegation {delegation['name']}",
-                  user_id=current_user.get("user_id"), org_id=org_id, action="DOC_DISPOSITION_SUCCESS")
+        log_event(
+            "document_service",
+            f"Mendisposisikan berkas '{doc_title}' ke divisi {delegation['name']}",
+            user_id=current_user.get("user_id"),
+            org_id=org_id,
+            action="DOC_DISPOSITION_SUCCESS",
+            audience="owner",
+            visibility="app",
+            severity="info"
+        )
         return jsonify({"message": f"Document successfully dispositioned to {delegation['name']}"}), 200
 
     except Exception as e:
-        return jsonify({"error": f"Failed to disposition document: {str(e)}"}), 500
+        log_event("document_service", f"Failed to disposition document: {str(e)}",
+                  user_id=current_user.get("user_id"), org_id=org_id, action="DOC_DISPOSITION_FAILED", severity="error")
+        return jsonify({"error": "Failed to disposition document"}), 500
 
 
-@document_bp.route('/<doc_id>', methods=['DELETE'])
+@document_bp.route('/<path:doc_id>', methods=['DELETE'])
 @token_required
 @role_required('owner')
 def delete_document(current_user, doc_id):
@@ -394,22 +557,92 @@ def delete_document(current_user, doc_id):
     user_id = current_user.get("user_id")
     org_id = current_user.get("org_id")
     
-    log_event("document_service", f"Delete request for doc_id: {doc_id} by {current_user.get('username')}",
-              user_id=user_id, org_id=org_id, action="DOC_DELETE_REQUEST", metadata={"doc_id": doc_id})
+    log_event(
+        "document_service",
+        f"Delete request for doc_id: {doc_id} by {current_user.get('username')}",
+        user_id=user_id,
+        org_id=org_id,
+        action="DOC_DELETE_REQUEST",
+        metadata={"doc_id": doc_id}
+    )
+
+    doc = docs_col.find_one({"doc_id": doc_id, "org_id": org_id})
+    if not doc:
+        log_event(
+            "document_service",
+            f"Document not found or not in org for delete: {doc_id}",
+            user_id=user_id,
+            org_id=org_id,
+            action="DOC_DELETE_FAILED",
+            metadata={"doc_id": doc_id}
+        )
+        return jsonify({"error": "Document not found"}), 404
+
+    drive_delete_success = None
+
+    if doc.get("google_drive") and doc["google_drive"].get("file_id"):
+        owner = users_col.find_one({
+            "org_id": org_id,
+            "role": "owner",
+            "google_drive_connected": True
+        })
+
+        if owner:
+            refresh_token = owner.get("google_oauth", {}).get("refresh_token")
+            if refresh_token:
+                drive_delete_success = delete_file_from_google_drive(
+                    doc["google_drive"]["file_id"],
+                    refresh_token
+                )
+            else:
+                drive_delete_success = False
+        else:
+            drive_delete_success = False
+
+    if drive_delete_success is False:
+        log_event(
+            "document_service",
+            f"Failed to delete document from Google Drive: {doc_id}",
+            user_id=user_id,
+            org_id=org_id,
+            action="DOC_DELETE_FAILED",
+            metadata={
+                "doc_id": doc_id,
+                "drive_delete_success": drive_delete_success
+            }
+        )
+        return jsonify({"error": "Failed to delete document from Google Drive"}), 500
 
     result = docs_col.delete_one({"doc_id": doc_id, "org_id": org_id})
+
     if result.deleted_count:
-        log_event("document_service", f"Document deleted: {doc_id}", 
-                  user_id=user_id, org_id=org_id, action="DOC_DELETE_SUCCESS", metadata={"doc_id": doc_id})
-        return jsonify({"message": "Document deleted"}), 200
-        
-    log_event("document_service", f"Document not found or not in org for delete: {doc_id}",
-              user_id=user_id, org_id=org_id, action="DOC_DELETE_FAILED", metadata={"doc_id": doc_id})
+        doc_title = doc.get("title", doc.get("filename", "Dokumen"))
+        log_event(
+            "document_service",
+            f"Menghapus berkas '{doc_title}' secara permanen",
+            user_id=user_id,
+            org_id=org_id,
+            action="DOC_DELETE_SUCCESS",
+            metadata={
+                "doc_id": doc_id,
+                "drive_delete_success": drive_delete_success
+            },
+            audience="owner" if current_user.get("role") == "owner" else "user",
+            visibility="app",
+            severity="info",
+        )
+
+        return jsonify({
+            "message": "Document deleted",
+            "google_drive_deleted": drive_delete_success
+        }), 200
+
     return jsonify({"error": "Document not found"}), 404
 
 
-@document_bp.route('/replace/<doc_id>', methods=['PUT'])
+@document_bp.route('/replace/<path:doc_id>', methods=['PUT', 'POST'])
 @token_required
+@role_required('owner')
 def replace_document(current_user, doc_id):
     """
     Replace and Re-process Document
@@ -479,8 +712,8 @@ def replace_document(current_user, doc_id):
             new_text = ocr_res.json().get("text", "")
         except Exception as e:
             log_event("document_service", f"OCR request failed during replace: {str(e)}",
-                      user_id=user_id, org_id=org_id, action="DOC_REPLACE_OCR_FAILED")
-            return jsonify({"error": f"OCR failed: {str(e)}"}), 500
+                      user_id=user_id, org_id=org_id, action="DOC_REPLACE_OCR_FAILED", severity="error")
+            return jsonify({"error": "OCR failed"}), 500
     elif request.form.get("text"):
         new_text = request.form.get("text")
     elif request.get_json(force=True, silent=True) and request.get_json(force=True, silent=True).get("text"):
@@ -490,9 +723,11 @@ def replace_document(current_user, doc_id):
         return jsonify({"error": "Either a file or text must be provided"}), 400
 
     classification, entities = process_ai_pipeline(new_text)
+    new_title = generate_document_title(new_text, new_filename)
 
     update_data = {
         "filename": new_filename,
+        "title": new_title,
         "content": new_text,
         "classification": classification,
         "entities": entities,
@@ -504,18 +739,21 @@ def replace_document(current_user, doc_id):
     docs_col.update_one({"doc_id": doc_id, "org_id": org_id}, {"$set": update_data})
     
     log_event("document_service", f"Document replaced and re-processed: {doc_id}",
-              user_id=user_id, org_id=org_id, action="DOC_REPLACE_SUCCESS", metadata={"doc_id": doc_id})
+              user_id=user_id, org_id=org_id, action="DOC_REPLACE_SUCCESS", metadata={"doc_id": doc_id},
+              audience="owner" if current_user.get("role") == "owner" else "user",
+              visibility="app",
+              severity="info")
 
     return jsonify({
         "message": "Document updated and re-processed",
         "doc_id": doc_id,
         "filename": new_filename,
+        "title": new_title,
         "classification": classification,
         "entities": entities
     }), 200
 
-
-@document_bp.route('/<doc_id>', methods=['GET'])
+@document_bp.route('/<path:doc_id>', methods=['GET'])
 @token_required
 def get_document_detail(current_user, doc_id):
     """
@@ -544,7 +782,7 @@ def get_document_detail(current_user, doc_id):
     if not doc:
         return jsonify({"error": "Document not found"}), 404
         
-    doc.pop('_id', None)
+    doc = _serialize_doc(doc)
     
     # Jika Google Drive belum terhubung, generate saran keamanan dinamis dengan Mistral AI
     if not doc.get("google_drive"):
@@ -555,11 +793,94 @@ def get_document_detail(current_user, doc_id):
     return jsonify(doc), 200
 
 
+@document_bp.route('/download/<path:doc_id>', methods=['GET'])
+@token_required
+def download_document(current_user, doc_id):
+    """
+    Download Document File
+    ---
+    tags:
+      - Document
+    produces:
+      - application/octet-stream
+    security:
+      - BearerAuth: []
+    parameters:
+      - name: doc_id
+        in: path
+        type: string
+        required: true
+        description: Unique document ID to download
+    responses:
+      200:
+        description: Document file downloaded successfully
+      400:
+        description: Google Drive is not connected or refresh token is missing
+      401:
+        description: Unauthorized - invalid or missing token
+      404:
+        description: Document not found or file source unavailable
+      500:
+        description: Download failed
+    """
+    org_id = current_user.get("org_id")
+
+    doc = docs_col.find_one({"doc_id": doc_id, "org_id": org_id})
+    if not doc:
+        return jsonify({"error": "Document not found"}), 404
+
+    filename = doc.get("filename", "document")
+    mimetype = doc.get("mimetype", "application/octet-stream")
+
+    try:
+        if doc.get("google_drive") and doc["google_drive"].get("file_id"):
+            owner = users_col.find_one({
+                "org_id": org_id,
+                "role": "owner",
+                "google_drive_connected": True
+            })
+
+            if not owner:
+                return jsonify({"error": "Organization owner's Google Drive is not connected"}), 400
+
+            refresh_token = owner.get("google_oauth", {}).get("refresh_token")
+            if not refresh_token:
+                return jsonify({"error": "Missing owner's Google refresh token"}), 400
+
+            file_id = doc["google_drive"]["file_id"]
+            file_bytes = download_file_from_google_drive(file_id, refresh_token)
+
+        elif doc.get("file_data"):
+            file_bytes = base64.b64decode(doc["file_data"])
+
+        else:
+            return jsonify({"error": "Document file source is not available"}), 404
+
+        return send_file(
+            BytesIO(file_bytes),
+            mimetype=mimetype,
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        log_event(
+            "document_service",
+            f"Download document failed: {str(e)}",
+            org_id=org_id,
+            action="DOC_DOWNLOAD_FAILED",
+            severity="error"
+        )
+        return jsonify({"error": "Download failed"}), 500
+
 @document_bp.route('/migrate-to-drive', methods=['POST'])
 def migrate_to_drive():
     """
     Migrasi dokumen fisik lama dari MongoDB (Base64) ke Google Drive setelah user terhubung
     """
+
+    
+
     data = request.get_json(force=True, silent=True) or {}
     user_id = data.get("user_id")
     
@@ -576,8 +897,10 @@ def migrate_to_drive():
         return jsonify({"error": "Missing Google refresh token"}), 400
         
     # Ambil semua dokumen milik user ini yang masih disimpan di MongoDB (memiliki file_data dan tidak memiliki google_drive)
+    org_id = user.get("org_id")
+
     docs_to_migrate = list(docs_col.find({
-        "uploaded_by": user_id,
+        "org_id": org_id,
         "file_data": {"$exists": True, "$ne": None},
         "google_drive": None
     }))
