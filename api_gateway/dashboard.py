@@ -76,3 +76,14 @@ def get_system_logs():
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@dashboard_bp.route('/privacy-policy', methods=['GET'])
+def privacy_policy():
+    return render_template('privacy_policy.html')
+
+
+@dashboard_bp.route('/delete-account', methods=['GET'])
+def delete_account_page():
+    return render_template('delete_account.html')
+

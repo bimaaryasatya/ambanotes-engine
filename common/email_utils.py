@@ -65,6 +65,38 @@ def send_otp_email(recipient_email, otp_code):
     return send_email(subject, recipient_email, body_html)
 
 
+def send_delete_account_otp_email(recipient_email, otp_code):
+    """
+    Sends a stylized OTP email to the user for account deletion verification.
+    """
+    subject = "AmbaNotes - Kode Verifikasi Penghapusan Akun"
+    
+    body_html = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+            <h2 style="color: #c0392b; text-align: center;">Permintaan Penghapusan Akun AmbaNotes</h2>
+            <p>Halo,</p>
+            <p>Kami menerima permintaan untuk menghapus akun AmbaNotes Anda secara permanen. Gunakan kode verifikasi OTP di bawah ini untuk mengonfirmasi tindakan ini:</p>
+            <div style="text-align: center; margin: 30px 0;">
+                <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; background: #fdf2f2; padding: 10px 20px; border-radius: 5px; color: #c0392b; border: 1px solid #f5c6cb;">
+                    {otp_code}
+                </span>
+            </div>
+            <p><strong>PENTING:</strong> Tindakan ini bersifat permanen. Seluruh data Anda (dokumen fisik, riwayat disposisi, riwayat percakapan AmbaAI, dan keanggotaan organisasi) akan dihapus selamanya dari sistem dan tidak dapat dipulihkan.</p>
+            <p>Kode verifikasi ini berlaku selama 10 menit. Jika Anda tidak mengajukan permintaan ini, mohon abaikan email ini.</p>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="font-size: 12px; color: #777; text-align: center;">
+                &copy; 2026 AmbaNotes Team. All rights reserved.
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return send_email(subject, recipient_email, body_html)
+
+
 def send_invitation_email(recipient_email, org_name, inviter_name):
     """
     Sends a beautiful invitation email to join an organization on AmbaNotes.

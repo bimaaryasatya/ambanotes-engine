@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Penghapusan Akun - AmbaNotes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --on-surface: #0f172a;
+            --on-surface-variant: #475569;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --outline: #e2e8f0;
+            --radius-lg: 24px;
+            --radius-md: 16px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            color: var(--on-surface);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 500px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo-container {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, var(--danger), #f43f5e);
+            color: white;
+            border-radius: var(--radius-md);
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--on-surface);
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: var(--on-surface-variant);
+        }
+
+        .warning-box {
+            background-color: rgba(239, 68, 68, 0.05);
+            border-left: 4px solid var(--danger);
+            padding: 16px;
+            border-radius: var(--radius-md);
+            margin-bottom: 24px;
+            font-size: 13.5px;
+            color: #b91c1c;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--on-surface);
+        }
+
+        input[type="email"], input[type="text"] {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 15px;
+            border: 1px solid var(--outline);
+            border-radius: var(--radius-md);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background-color: #f8fafc;
+        }
+
+        input[type="email"]:focus, input[type="text"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+            background-color: #fff;
+        }
+
+        .checkbox-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--on-surface-variant);
+            margin-bottom: 24px;
+        }
+
+        .checkbox-container input {
+            margin-top: 3px;
+        }
+
+        .btn {
+            width: 100%;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: #000000;
+            border: none;
+            padding: 14px;
+            font-size: 15px;
+            font-weight: 600;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 15px rgba(79, 70, 229, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger), #f43f5e);
+            box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            box-shadow: 0 6px 15px rgba(239, 68, 68, 0.3);
+        }
+
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(0, 0, 0, 0.15);
+            border-radius: 50%;
+            border-top-color: #000000;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background-color: #fee2e2;
+            border: 1px solid #fca5a5;
+            color: #b91c1c;
+            padding: 12px;
+            border-radius: var(--radius-md);
+            font-size: 13.5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .success-state {
+            text-align: center;
+            display: none;
+        }
+
+        .success-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 64px;
+            height: 64px;
+            background-color: #dcfce7;
+            color: #15803d;
+            border-radius: 50%;
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+
+        .success-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #166534;
+            margin-bottom: 12px;
+        }
+
+        .success-desc {
+            font-size: 14.5px;
+            color: var(--on-surface-variant);
+            margin-bottom: 24px;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 16px;
+            font-size: 13.5px;
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        #step2 {
+            display: none;
+        }
+
+        @media (max-width: 480px) {
+            .card {
+                padding: 24px 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="card" id="formCard">
+        <!-- Error Alert -->
+        <div class="error-message" id="errorMessage"></div>
+
+        <!-- STEP 1: Request Deletion OTP -->
+        <div id="step1">
+            <div class="header">
+                <div class="logo-container">!</div>
+                <h1>Hapus Akun AmbaNotes</h1>
+                <p class="subtitle">Ajukan permohonan hapus akun Anda secara permanen</p>
+            </div>
+
+            <div class="warning-box">
+                <strong>PERINGATAN:</strong> Tindakan ini bersifat permanen dan tidak dapat dibatalkan. Seluruh arsip dokumen, riwayat disposisi, riwayat disposisi internal instansi, dan akses asisten AI Anda akan dihapus selamanya.
+            </div>
+
+            <form id="requestOtpForm">
+                <div class="form-group">
+                    <label for="email">Alamat Email Terdaftar</label>
+                    <input type="email" id="email" required placeholder="Masukkan email Anda..." autocomplete="email">
+                </div>
+
+                <label class="checkbox-container">
+                    <input type="checkbox" id="confirmCheckbox" required>
+                    <span>Saya memahami konsekuensi penghapusan akun secara permanen dan menyetujui penghapusan seluruh data pribadi saya di AmbaNotes.</span>
+                </label>
+
+                <button type="submit" class="btn" id="btnRequestOtp">
+                    <span class="spinner" id="spinner1"></span>
+                    Kirim Kode Verifikasi OTP
+                </button>
+            </form>
+            <center><a href="/privacy-policy" class="back-link">Kembali ke Kebijakan Privasi</a></center>
+        </div>
+
+        <!-- STEP 2: Verify OTP and Confirm Deletion -->
+        <div id="step2">
+            <div class="header">
+                <div class="logo-container">✓</div>
+                <h1>Verifikasi OTP</h1>
+                <p class="subtitle" id="otpSubtitle">Masukkan kode verifikasi yang kami kirimkan ke email Anda</p>
+            </div>
+
+            <form id="confirmDeleteForm">
+                <div class="form-group">
+                    <label for="otp">Kode Verifikasi OTP (6 Digit)</label>
+                    <input type="text" id="otp" required placeholder="Contoh: 123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; letter-spacing: 6px; font-size: 20px; font-weight: bold;">
+                </div>
+
+                <button type="submit" class="btn btn-danger" id="btnConfirmDelete">
+                    <span class="spinner" id="spinner2"></span>
+                    Hapus Akun Saya Selamanya
+                </button>
+            </form>
+            <center>
+                <a href="#" class="back-link" id="btnChangeEmail" style="margin-right: 15px;">Ubah Email</a>
+                <a href="#" class="back-link" id="btnResendOtp">Kirim Ulang Kode OTP</a>
+            </center>
+        </div>
+
+        <!-- SUCCESS STATE -->
+        <div class="success-state" id="successState">
+            <div class="success-icon">✓</div>
+            <h2 class="success-title">Akun Berhasil Dihapus</h2>
+            <p class="success-desc">Permintaan Anda telah diproses. Akun AmbaNotes dan seluruh data pribadi terkait telah dihapus secara permanen dari basis data kami.</p>
+            <p class="success-desc">Terima kasih telah menggunakan AmbaNotes.</p>
+        </div>
+    </div>
+
+    <script>
+        const step1 = document.getElementById('step1');
+        const step2 = document.getElementById('step2');
+        const successState = document.getElementById('successState');
+        const errorDiv = document.getElementById('errorMessage');
+
+        const requestOtpForm = document.getElementById('requestOtpForm');
+        const confirmDeleteForm = document.getElementById('confirmDeleteForm');
+
+        const btnRequestOtp = document.getElementById('btnRequestOtp');
+        const btnConfirmDelete = document.getElementById('btnConfirmDelete');
+
+        const otpSubtitle = document.getElementById('otpSubtitle');
+        const btnChangeEmail = document.getElementById('btnChangeEmail');
+        const btnResendOtp = document.getElementById('btnResendOtp');
+
+        let userEmail = '';
+
+        function showError(msg) {
+            errorDiv.textContent = msg;
+            errorDiv.style.display = 'block';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function hideError() {
+            errorDiv.style.display = 'none';
+        }
+
+        // STEP 1 Form Submission (Request OTP)
+        requestOtpForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            hideError();
+            
+            userEmail = document.getElementById('email').value.trim();
+            const checkboxChecked = document.getElementById('confirmCheckbox').checked;
+
+            if (!userEmail) {
+                showError('Mohon masukkan alamat email Anda.');
+                return;
+            }
+            if (!checkboxChecked) {
+                showError('Anda harus menyetujui pernyataan konsekuensi hapus akun.');
+                return;
+            }
+
+            // Show loading state
+            btnRequestOtp.disabled = true;
+            btnRequestOtp.innerHTML = '<span class="spinner" style="display: inline-block;"></span> Mengirim Kode OTP...';
+
+            try {
+                const response = await fetch('/auth/delete-account/request-otp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email: userEmail })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Terjadi kesalahan sistem.');
+                }
+
+                // Success sending OTP
+                otpSubtitle.innerHTML = `Masukkan 6 digit kode OTP yang telah dikirimkan ke <strong>${userEmail}</strong>`;
+                step1.style.display = 'none';
+                step2.style.display = 'block';
+
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                // Restore button state
+                btnRequestOtp.disabled = false;
+                btnRequestOtp.innerHTML = '<span class="spinner" style="display: none;"></span> Kirim Kode Verifikasi OTP';
+            }
+        });
+
+        // STEP 2 Form Submission (Verify & Delete)
+        confirmDeleteForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            hideError();
+
+            const otpCode = document.getElementById('otp').value.trim();
+
+            if (!otpCode || otpCode.length !== 6) {
+                showError('Mohon masukkan kode OTP 6 digit yang valid.');
+                return;
+            }
+
+            // Show loading state
+            btnConfirmDelete.disabled = true;
+            btnConfirmDelete.innerHTML = '<span class="spinner" style="display: inline-block;"></span> Menghapus Akun...';
+
+            try {
+                const response = await fetch('/auth/delete-account/confirm', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email: userEmail, otp: otpCode })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Terjadi kesalahan saat penghapusan akun.');
+                }
+
+                // Success Deletion
+                step2.style.display = 'none';
+                successState.style.display = 'block';
+
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                btnConfirmDelete.disabled = false;
+                btnConfirmDelete.innerHTML = '<span class="spinner" style="display: none;"></span> Hapus Akun Saya Selamanya';
+            }
+        });
+
+        // Back to Step 1 from Step 2 (Change Email)
+        btnChangeEmail.addEventListener('click', function(e) {
+            e.preventDefault();
+            hideError();
+            document.getElementById('otp').value = '';
+            step2.style.display = 'none';
+            step1.style.display = 'block';
+        });
+
+        // Resend OTP handler
+        btnResendOtp.addEventListener('click', async function(e) {
+            e.preventDefault();
+            hideError();
+            
+            // Temporary feedback
+            btnResendOtp.style.pointerEvents = 'none';
+            btnResendOtp.style.opacity = '0.5';
+            btnResendOtp.textContent = 'Mengirim Ulang...';
+
+            try {
+                const response = await fetch('/auth/delete-account/request-otp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email: userEmail })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Gagal mengirim ulang OTP.');
+                }
+
+                alert('Kode OTP baru telah berhasil dikirim ke email Anda.');
+
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                btnResendOtp.style.pointerEvents = 'auto';
+                btnResendOtp.style.opacity = '1';
+                btnResendOtp.textContent = 'Kirim Ulang Kode OTP';
+            }
+        });
+    </script>
+</body>
+</html>

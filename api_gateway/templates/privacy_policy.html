@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kebijakan Privasi - AmbaNotes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --secondary: #3b82f6;
+            --on-surface: #0f172a;
+            --on-surface-variant: #475569;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --outline: #e2e8f0;
+            --radius-lg: 24px;
+            --radius-md: 16px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            color: var(--on-surface);
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .logo-container {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border-radius: var(--radius-md);
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--on-surface);
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+        }
+
+        .last-updated {
+            font-size: 14px;
+            color: var(--on-surface-variant);
+        }
+
+        h2 {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--on-surface);
+            margin-top: 32px;
+            margin-bottom: 12px;
+            border-bottom: 2px solid var(--outline);
+            padding-bottom: 8px;
+        }
+
+        p {
+            font-size: 15px;
+            color: var(--on-surface-variant);
+            margin-bottom: 16px;
+            text-align: justify;
+        }
+
+        ul {
+            margin-left: 20px;
+            margin-bottom: 16px;
+            color: var(--on-surface-variant);
+            font-size: 15px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        .alert-box {
+            background-color: rgba(79, 70, 229, 0.05);
+            border-left: 4px solid var(--primary);
+            padding: 20px;
+            border-radius: var(--radius-md);
+            margin: 32px 0;
+        }
+
+        .alert-box h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        .alert-box p {
+            margin-bottom: 16px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            border-radius: var(--radius-md);
+            box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--on-surface-variant);
+            border-top: 1px solid var(--outline);
+            padding-top: 20px;
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 20px 10px;
+            }
+
+            .container {
+                padding: 24px 16px;
+                border-radius: var(--radius-md);
+            }
+
+            h1 {
+                font-size: 22px;
+            }
+
+            h2 {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo-container">A</div>
+            <h1>Kebijakan Privasi AmbaNotes</h1>
+            <p class="last-updated">Terakhir diperbarui: 15 Juli 2026</p>
+        </div>
+
+        <p>Selamat datang di AmbaNotes. Kami berkomitmen untuk melindungi informasi pribadi Anda dan hak privasi Anda. Kebijakan Privasi ini menjelaskan bagaimana kami mengumpulkan, menggunakan, mengungkapkan, dan menjaga informasi Anda ketika Anda menggunakan aplikasi mobile AmbaNotes dan layanan backend terkait kami.</p>
+
+        <h2>1. Informasi yang Kami Kumpulkan</h2>
+        <p>Kami mengumpulkan beberapa informasi untuk menyediakan layanan manajemen dokumen fisik dan secretariat berbasis kecerdasan buatan (AI) yang dipersonalisasi:</p>
+        <ul>
+            <li><strong>Informasi Akun:</strong> Alamat email, nama lengkap, kata sandi terenkripsi, nama organisasi/instansi, dan peran pengguna (owner, member, developer).</li>
+            <li><strong>Dokumen & Berkas:</strong> Berkas dokumen fisik yang Anda unggah (gambar hasil pemindaian, PDF) untuk keperluan penyimpanan, kategorisasi otomatis, pengenalan karakter (OCR), dan analisis entitas nama (NER).</li>
+            <li><strong>Integrasi Pihak Ketiga:</strong> Jika diaktifkan oleh pemilik organisasi, kami mengumpulkan token akses Google Drive yang didelegasikan untuk mengotomatiskan pencadangan dan sinkronisasi file dokumen secara langsung ke Google Drive pribadi/organisasi Anda.</li>
+            <li><strong>Histori Chat AmbaAI:</strong> Transkrip interaksi Anda dengan asisten cerdas AmbaAI untuk memproses pertanyaan seputar dokumen dan memberikan ringkasan informasi.</li>
+            <li><strong>Log Aktivitas:</strong> Riwayat tindakan yang Anda lakukan dalam platform, seperti membuat disposisi, mengedit metadata dokumen, dan mengundang anggota tim untuk tujuan audit keamanan internal organisasi.</li>
+        </ul>
+
+        <h2>2. Bagaimana Kami Menggunakan Informasi Anda</h2>
+        <p>AmbaNotes menggunakan data Anda untuk tujuan operasional dan peningkatan layanan:</p>
+        <ul>
+            <li>Menyediakan, mengoperasikan, dan memelihara fitur aplikasi AmbaNotes.</li>
+            <li>Memproses pemindaian dokumen fisik dan melakukan klasifikasi surat menggunakan model kecerdasan buatan.</li>
+            <li>Mengirimkan notifikasi pengingat agenda surat masuk/keluar ke perangkat Anda.</li>
+            <li>Mengamankan akun Anda dan memproses verifikasi masuk serta pemulihan kata sandi.</li>
+            <li>Mematuhi kewajiban hukum dan audit keamanan instansi.</li>
+        </ul>
+
+        <h2>3. Penghapusan Data & Hak Pengguna</h2>
+        <p>Kami sangat menghormati hak Anda atas data pribadi Anda. Anda memiliki kontrol penuh atas akun dan data yang Anda miliki di AmbaNotes:</p>
+        <ul>
+            <li><strong>Penghapusan dalam Aplikasi:</strong> Pengguna dapat menghapus akun mereka kapan saja melalui menu <em>Pengaturan & Profil > Keamanan & Sandi > Hapus Akun Saya Selamanya</em> di dalam aplikasi mobile AmbaNotes.</li>
+            <li><strong>Penghapusan via Web:</strong> Jika Anda tidak lagi memiliki akses ke aplikasi mobile AmbaNotes, Anda dapat mengajukan permohonan penghapusan akun secara mandiri melalui tautan web publik resmi kami.</li>
+        </ul>
+
+        <div class="alert-box">
+            <h3>Ajukan Penghapusan Akun Melalui Web</h3>
+            <p>Sesuai dengan ketentuan Google Play Store, Anda dapat meminta agar seluruh data akun dan data terkait Anda dihapus secara permanen dari sistem kami tanpa harus membuka aplikasi mobile.</p>
+            <a href="/delete-account" class="btn">Hapus Akun Sekarang</a>
+        </div>
+
+        <h2>4. Keamanan Data</h2>
+        <p>Kami menerapkan langkah-langkah keamanan teknis dan organisasi yang dirancang untuk melindungi keamanan setiap informasi pribadi yang kami proses. Namun, mohon diingat bahwa tidak ada transmisi internet atau teknologi penyimpanan data yang 100% aman. Kami menyarankan Anda untuk mengakses layanan hanya dalam lingkungan jaringan yang aman.</p>
+
+        <h2>5. Kontak Kami</h2>
+        <p>Jika Anda memiliki pertanyaan atau komentar tentang kebijakan ini, Anda dapat menghubungi tim developer kami melalui email di <strong>work@bimazznxt.my.id</strong> atau telepon di <strong>+62 811-0000-1234</strong>.</p>
+
+        <div class="footer">
+            <p>&copy; 2026 AmbaNotes Team. Seluruh hak cipta dilindungi undang-undang.</p>
+        </div>
+    </div>
+</body>
+</html>

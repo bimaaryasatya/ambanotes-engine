@@ -10,7 +10,7 @@ from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash, check_password_hash
 from common.db import users_col, orgs_col, invitations_col, delegations_col, assets_col, docs_col, otps_col, logs_col
 from common.jwt_utils import generate_token, token_required, role_required
-from common.email_utils import send_otp_email, send_invitation_email
+from common.email_utils import send_otp_email, send_invitation_email, send_delete_account_otp_email
 from common.logger import log_event
 from common.config import Config
 from bson.objectid import ObjectId
@@ -1467,6 +1467,140 @@ def delete_account(current_user):
     users_col.delete_one({"_id": ObjectId(user_id)})
 
     log_event("auth_service", f"User account deleted for user: {user.get('username') or user.get('email')}", user_id=user_id, action="ACCOUNT_DELETED")
+
+    return jsonify({"message": "Akun Anda telah berhasil dihapus selamanya."}), 200
+
+
+@auth_bp.route('/delete-account/request-otp', methods=['POST'])
+def delete_account_request_otp():
+    """
+    Request OTP for Account Deletion (Public Web Flow)
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+          properties:
+            email:
+              type: string
+              example: "user@example.com"
+    responses:
+      200:
+        description: OTP sent to email successfully
+      400:
+        description: Missing email or invalid
+      404:
+        description: User with this email does not exist
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    email = data.get('email', '').strip().lower()
+
+    if not email:
+        return jsonify({"error": "Email wajib diisi"}), 400
+
+    user = users_col.find_one({"email": email})
+    if not user:
+        return jsonify({"error": "Pengguna dengan email tersebut tidak ditemukan"}), 404
+
+    # Generate 6-digit OTP
+    otp_code = "".join([str(secrets.randbelow(10)) for _ in range(6)])
+    expiry = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+
+    # Store/Update OTP in database with purpose "delete_account"
+    otps_col.update_one(
+        {"email": email, "purpose": "delete_account"},
+        {"$set": {"otp": otp_code, "expiry": expiry, "created_at": datetime.datetime.utcnow()}},
+        upsert=True
+    )
+
+    # Send email
+    success, message = send_delete_account_otp_email(email, otp_code)
+    
+    if not success:
+        log_event("auth_service", f"Failed to send delete-account OTP to {email}: {message}", action="DELETE_ACCOUNT_OTP_FAILED")
+        return jsonify({"error": f"Gagal mengirim email: {message}"}), 500
+
+    log_event("auth_service", f"Delete-account OTP sent to {email}", user_id=str(user['_id']), action="DELETE_ACCOUNT_OTP_SENT")
+
+    return jsonify({"message": "Kode OTP penghapusan akun telah dikirim ke email Anda"}), 200
+
+
+@auth_bp.route('/delete-account/confirm', methods=['POST'])
+def delete_account_confirm():
+    """
+    Confirm Account Deletion using OTP (Public Web Flow)
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - otp
+          properties:
+            email:
+              type: string
+            otp:
+              type: string
+    responses:
+      200:
+        description: Account deleted successfully
+      400:
+        description: Invalid or expired OTP
+      404:
+        description: User not found
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    email = data.get('email', '').strip().lower()
+    otp_input = data.get('otp', '').strip()
+
+    if not email or not otp_input:
+        return jsonify({"error": "Email dan kode OTP wajib diisi"}), 400
+
+    # Verify OTP in DB
+    otp_record = otps_col.find_one({"email": email, "purpose": "delete_account"})
+    
+    if not otp_record:
+        return jsonify({"error": "Kode OTP tidak ditemukan atau silakan kirim ulang"}), 400
+    
+    if otp_record['otp'] != otp_input:
+        return jsonify({"error": "Kode OTP yang Anda masukkan salah"}), 400
+    
+    if datetime.datetime.utcnow() > otp_record['expiry']:
+        return jsonify({"error": "Kode OTP telah kedaluwarsa, silakan minta kode baru"}), 400
+
+    # User existence check
+    user = users_col.find_one({"email": email})
+    if not user:
+        return jsonify({"error": "Pengguna tidak ditemukan"}), 404
+
+    user_id = str(user['_id'])
+
+    # Delete the user from users collection
+    users_col.delete_one({"_id": ObjectId(user_id)})
+
+    # Delete the used OTP
+    otps_col.delete_one({"email": email, "purpose": "delete_account"})
+
+    log_event("auth_service", f"User account deleted via web verification for user: {email}", user_id=user_id, action="ACCOUNT_DELETED")
 
     return jsonify({"message": "Akun Anda telah berhasil dihapus selamanya."}), 200
 
